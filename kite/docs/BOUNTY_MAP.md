@@ -17,12 +17,13 @@
 | Alchemy — Best Projects using Alchemy | All browser JSON-RPC reads and signed transaction broadcasts go through the server's same-origin RPC proxy; the proxy uses Alchemy Monad Testnet when `ALCHEMY_API_KEY` is configured | Create a Monad testnet app in Alchemy, set the server-only key, check `/api/health` reports `rpcProvider: alchemy`, and record the real call in the demo. |
 | Kimi — Best Builds Powered by KIMI | Optional provider-backed invoice copy drafting; the model is denied amount, address and transaction capabilities | Add the event key, configure `KIMI_API_KEY`, and demo Kimi generating the invoice copy before a human reviews it. A local preview fallback is explicitly **not** sponsor-model usage. |
 | Alibaba Cloud — Qwen 3.8 Max | Optional Qwen localization of recipient-facing invoice copy | Add the event key, configure the exact regional endpoint/key/model and show Qwen translating an invoice in the demo. |
+| Metropolis Track 2 — Consumer Payments (payroll-style streams) | Signed payment plans: 2–12 installments every 7/14/30 days, each a separate passkey-signed EIP-712 link bound to plan ID, index and due date; payer pays each one directly in AUSD | Demo two installments end-to-end on Monad testnet with real passkeys; this is a discrete-installment flow, not a continuously streaming on-chain salary contract. |
 
 ## Deliberately not claimed
 
 - Dynamic and Privy are not used: Mera is the chosen account layer, and stacking auth providers would contradict the Mera-only product/security story.
 - Kuru, Perpl and MetaMask Agent Wallet are trading-specific; Kite does not add unrelated trading just to list more logos.
-- Chainlink CRE, Cleanverse, Nansen, Hunyuan and campus-team bounties are not claimed without a meaningful, testable feature that meets their published requirements.
+- Chainlink CRE, Cleanverse, Nansen, Hunyuan (Kepler Plan multimodal/interactive track), Perpl, Kuru, MetaMask Agent Wallet and campus-team bounties are not claimed. Each needs its own account, SDK/API key or a product that does not fit a consumer-payments app. Programmable gifts (escrow with claim conditions) are also not built: they need a deployed contract, which is out of scope for this testnet build.
 
 ## Important reality check
 

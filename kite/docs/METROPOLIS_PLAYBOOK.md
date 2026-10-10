@@ -31,7 +31,7 @@
 
 ### 目前可确认的成绩
 
-- Kite 的根应用和 Envio indexer 已完成本地实现和验证。使用 Node.js `v24.21.0` / npm `10.8.2` 时：根应用类型检查通过；根测试 **5 个文件、18 项测试通过**；生产构建通过；npm audit 未发现漏洞。`indexer/` 的 codegen、类型检查、handler 测试（1 项）和 audit 也通过。
+- Kite 的根应用和 Envio indexer 已完成本地实现和验证。使用 Node.js `v24.21.0` / npm `10.8.2` 时：根应用类型检查通过；根测试 **7 个文件、48 项测试通过**（含分期付款、服务端路由 in-process 测试）；生产构建通过；npm audit 未发现漏洞。`indexer/` 的 codegen、类型检查、handler 测试（1 项）和 audit 也通过。
 - 产品核心方向是：商家创建一张 AUSD 付款请求，付款人检查收款方、金额、币种和期限后，用 Mera passkey 签名并在 Monad Testnet 转账。通讯录使用独立派生密钥在用户浏览器加密。
 - 本轮已准备 Render Blueprint（根目录 `render.yaml`）：Node `24.21.0`、新加坡区域、Free demo plan、`/api/health` health check；它只是可导入的配置，**没有**连接 repo、创建 Render service、取得 live HTTPS URL 或做线上 smoke test。
 - 有 AUSD Transfer 的 Envio config/schema/handler 和本地测试；但目前没有 Envio Cloud 部署。应用有 Alchemy/Kimi/Qwen 接口代码；目前没有配置实际服务密钥，也没有实际 provider 调用。
@@ -104,7 +104,7 @@ Monad 官方 Metropolis 页面列出：
 | Envio | `indexer/config.yaml`、schema、Transfer handler、测试 | codegen/类型检查/本地 handler 测试通过；尚未在 Envio Cloud 同步，也未被线上 app 调用 |
 | Alchemy | 服务器端 RPC proxy | 代码已写；当前 health 显示 `rpcProvider: public`，不是 Alchemy |
 | Kimi/Qwen | 服务器端可选文案/翻译 API | 输入校验和 fallback 代码存在；当前没有真实 provider key/成功请求 |
-| 质量检查 | 根项目 18 项测试、indexer 1 项测试、build/typecheck/audit | 先前在 Node 24.21.0 / npm 10.8.2 下通过；此轮仅改 Render/package metadata/docs。当前 sandbox 是 Node 20.20.2，低于项目 strict Node 24 要求，所以没有在本轮重跑 npm test/build |
+| 质量检查 | 根项目 48 项测试、indexer 1 项测试、build/typecheck/audit | 先前在 Node 24.21.0 / npm 10.8.2 下通过；此轮仅改 Render/package metadata/docs。当前 sandbox 是 Node 20.20.2，低于项目 strict Node 24 要求，所以没有在本轮重跑 npm test/build |
 
 ### 尚未完成事项的原因：区分代码缺失、未实测与需要用户授权
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeCheck,
-  Banknote, Bell, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, Copy,
+  Banknote, Bell, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, Copy,
   ExternalLink, Eye, FileText, Globe2, House, KeyRound, LoaderCircle, LockKeyhole,
   LogOut, Menu, MoreHorizontal, Plus, RefreshCw, Send, Settings2, ShieldCheck,
   Sparkles, UserRound, Users, Wallet, X, Zap,
@@ -16,6 +16,10 @@ import { runAIAssist, localDraftPreview, type AIProvider } from './lib/ai';
 import { loadContacts, saveContacts } from './lib/storage';
 import type { ContactRecord } from './lib/crypto';
 import { formatDate, friendlyError, initials, shortAddress } from './lib/format';
+import { planInstallments, signInstallmentPlan } from './lib/schedule';
+import type { PaymentRequest } from './lib/invoices';
+
+type PlanLink = { title: string; amount: string; dueAt: number; url: string };
 
 const previewContacts = [
   { id: 'p1', name: 'Mika Chen', address: '0x03d75ce8c2831b76f68b816e6f83a488aa620583', country: 'Japan', currency: 'JPY', createdAt: 0 },
@@ -105,6 +109,7 @@ function App() {
   const [sendOpen, setSendOpen] = useState(false);
   const [pendingOutbound, setPendingOutbound] = useState<PendingTransfer | null>(restorePendingTransfer);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [planLinks, setPlanLinks] = useState<PlanLink[]>([]);
   const [contactOpen, setContactOpen] = useState(false);
   const [initialRecipient, setInitialRecipient] = useState('');
   const [incomingRequest, setIncomingRequest] = useState<Awaited<ReturnType<typeof decodePaymentRequest>> | null>(null);
@@ -366,7 +371,7 @@ function App() {
             }}
             onCreated={(request, url) => { setCreatedUrl(url); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }}
             onCopy={async () => { try { await copyText(createdUrl); showToast({ tone: 'success', text: 'Payment link copied.' }); } catch { showToast({ tone: 'error', text: 'Clipboard is unavailable; select and copy the payment link.' }); } }}
-            showToast={showToast}
+            showToast={showToast} planLinks={planLinks}
           />}
           {active === 'contacts' && <ContactsPage isLive={isLive} contacts={currentContacts} account={account} onConnect={() => setConnectOpen(true)} onAdd={() => setContactOpen(true)} onSelect={(contact) => { setActive('payments'); setSendOpen(true); setInitialRecipient(contact.address); }} />}
           {active === 'activity' && <ActivityPage isLive={isLive} transfers={isLive ? transfers : previewTransfers} feedSource={isLive ? feedSource : 'preview'} address={activeAddress} busy={chainBusy} refresh={() => void refreshLiveData()} onConnect={() => setConnectOpen(true)} />}
@@ -375,7 +380,7 @@ function App() {
       </main>
 
       {sendOpen && <SendModal account={account} snapshot={snapshot} contacts={currentContacts} initialRecipient={initialRecipient} pendingTransfer={pendingOutbound} onPendingTransfer={updatePendingOutbound} onClose={() => setSendOpen(false)} onConnect={() => setConnectOpen(true)} onSent={async (hash) => { updatePendingOutbound(null); setSendOpen(false); showToast({ tone: 'success', text: `Payment confirmed on Monad · ${shortAddress(hash, 8, 6)}` }); await refreshLiveData(); }} />}
-      {requestOpen && <RequestModal account={account} health={health} onClose={() => setRequestOpen(false)} onConnect={() => setConnectOpen(true)} onCreated={(request, url) => { setRequestOpen(false); setCreatedUrl(url); setActive('invoices'); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }} showToast={showToast} />}
+      {requestOpen && <RequestModal account={account} health={health} onClose={() => setRequestOpen(false)} onConnect={() => setConnectOpen(true)} onCreated={(request, url) => { setRequestOpen(false); setCreatedUrl(url); setActive('invoices'); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }} onPlanCreated={(requests) => { setRequestOpen(false); setPlanLinks(requests.map((r) => ({ title: r.title, amount: r.amount, dueAt: r.schedule?.dueAt ?? r.expiresAt, url: createShareUrl(r, window.location.origin) }))); setCreatedUrl(''); setActive('invoices'); showToast({ tone: 'success', text: `Payment plan signed · ${requests.length} installment links ready` }); }} showToast={showToast} />}
       {contactOpen && <ContactModal account={account} contacts={contacts} onClose={() => setContactOpen(false)} onSave={(next) => { setContacts(next); setContactOpen(false); showToast({ tone: 'success', text: 'Contact encrypted on this device.' }); }} onConnect={() => setConnectOpen(true)} />}
       {connectOpen && <ConnectModal name={createName} setName={setCreateName} busy={authBusy} onClose={() => setConnectOpen(false)} onCreate={() => void finishConnect('create')} onSignin={() => void finishConnect('signin')} />}
       {toast && <div className={`toast toast-${toast.tone}`} role="status"><span className="toast-icon">{toast.tone === 'success' ? <CheckCircle2 size={17} /> : toast.tone === 'error' ? <CircleHelp size={17} /> : <Bell size={17} />}</span>{toast.text}<button onClick={() => setToast(null)} aria-label="Dismiss"><X size={14} /></button></div>}
@@ -596,7 +601,7 @@ function PaymentsPage(props: {
 function InvoicesPage(props: {
   isLive: boolean; account: KiteAccount | null; health: Health; onConnect: () => void; createdUrl: string; qrData: string;
   setCreated: (url: string) => Promise<void>; onCreated: (request: Awaited<ReturnType<typeof signPaymentRequest>>, url: string) => void;
-  onCopy: () => void; showToast: (message: ToastMessage) => void;
+  onCopy: () => void; showToast: (message: ToastMessage) => void; planLinks: PlanLink[];
 }) {
   const [amount, setAmount] = useState('250');
   const [title, setTitle] = useState('Product design sprint');
@@ -676,6 +681,7 @@ function InvoicesPage(props: {
           <div className="preview-card-foot"><ShieldCheck size={13} /> EIP-712 signed · Monad testnet</div>
         </div>
         <div className="side-tip"><div className="tip-icon"><Zap size={15} /></div><div><strong>One link. Clear terms.</strong><p>The recipient checks the signature, then signs an AUSD transfer from their own passkey wallet. No custodian holds funds.</p></div></div>
+        {props.planLinks.length > 0 && <div className="surface-card share-card plan-card"><div className="share-card-title"><CheckCircle2 size={16} /> Payment plan · {props.planLinks.length} installments</div>{props.planLinks.map((link) => <div className="plan-row" key={link.url}><div><strong>{link.title}</strong><small>{formatAUSD(link.amount)} AUSD · due {formatDate(link.dueAt)}</small></div><button className="button button-soft button-xs" onClick={() => void copyText(link.url).then(() => props.showToast({ tone: 'success', text: 'Installment link copied.' })).catch(() => props.showToast({ tone: 'error', text: 'Clipboard is unavailable; copy the link manually.' }))}><Copy size={12} /> Copy</button></div>)}<small className="plan-note">Each installment is a separate signed link. Payers pay each one from their own wallet.</small></div>}
         {props.createdUrl && <div className="surface-card share-card"><div className="share-card-title"><CheckCircle2 size={16} /> Link ready to share</div>{props.qrData && <img className="qr-image" src={props.qrData} alt="QR code for signed Kite payment request" />}<div className="share-url">{props.createdUrl}</div><button className="button button-dark full-button" onClick={props.onCopy}><Copy size={14} /> Copy payment link</button></div>}
         <div className="provider-card"><span className="provider-kicker">MODEL CONNECTIONS</span><div className="provider-row"><span className="provider-logo kimi-logo">K</span><span><strong>Kimi</strong><small>Invoice copy</small></span><span className={`provider-state ${props.health.integrations?.ai?.kimi ? 'ready' : ''}`}>{props.health.integrations?.ai?.kimi ? 'READY' : 'KEY NEEDED'}</span></div><div className="provider-row"><span className="provider-logo qwen-logo">Q</span><span><strong>Qwen</strong><small>Localization</small></span><span className={`provider-state ${props.health.integrations?.ai?.qwen ? 'ready' : ''}`}>{props.health.integrations?.ai?.qwen ? 'READY' : 'KEY NEEDED'}</span></div><div className="provider-note">Keys are server-side only. Without a real sponsor key, local preview text is not counted as model usage.</div></div>
       </aside>
@@ -801,8 +807,10 @@ function SendModal({ account, snapshot, contacts, initialRecipient, pendingTrans
   </Modal>;
 }
 
-function RequestModal({ account, health, onClose, onConnect, onCreated, showToast }: { account: KiteAccount | null; health: Health; onClose: () => void; onConnect: () => void; onCreated: (request: Awaited<ReturnType<typeof signPaymentRequest>>, url: string) => void; showToast: (message: ToastMessage) => void }) {
+function RequestModal({ account, health, onClose, onConnect, onCreated, onPlanCreated, showToast }: { account: KiteAccount | null; health: Health; onClose: () => void; onConnect: () => void; onCreated: (request: Awaited<ReturnType<typeof signPaymentRequest>>, url: string) => void; onPlanCreated: (requests: PaymentRequest[]) => void; showToast: (message: ToastMessage) => void }) {
   const [amount, setAmount] = useState('150');
+  const [installments, setInstallments] = useState(1);
+  const [intervalDays, setIntervalDays] = useState(30);
   const [title, setTitle] = useState('Freelance work');
   const [description, setDescription] = useState('Thank you for the collaboration. Please settle this invoice in AUSD.');
   const [brief, setBrief] = useState('Write a warm invoice note for this week’s design work.');
@@ -829,21 +837,38 @@ function RequestModal({ account, health, onClose, onConnect, onCreated, showToas
     if (!account) { onClose(); onConnect(); return; }
     setBusy(true);
     try {
+      if (installments > 1) {
+        const requests = await signInstallmentPlan(account.account, { payee: account.address, totalAmountText: amount, count: installments, intervalDays, title, description });
+        onPlanCreated(requests);
+        return;
+      }
       const request = await signPaymentRequest({ account: account.account, payee: account.address, amountText: amount, title, description });
       onCreated(request, createShareUrl(request, window.location.origin));
     } catch (cause) { setError(friendlyError(cause)); }
     finally { setBusy(false); }
   };
+  const planPreview = (() => {
+    if (installments <= 1) return null;
+    try {
+      const drafts = planInstallments({ payee: account?.address ?? '0x0000000000000000000000000000000000000001', totalAmountText: amount, count: installments, intervalDays, title, description });
+      return `${installments} signed links · ${drafts[0].amountText} AUSD each (last one carries any rounding) · due every ${intervalDays} days`;
+    } catch (cause) { return friendlyError(cause); }
+  })();
   return <Modal title="Request payment" subtitle="Create an EIP-712 signed invoice link." onClose={onClose}>
     {!account && <div className="modal-info-banner"><KeyRound size={15} /><span>Connect a passkey before creating a signed request.</span></div>}
     <div className="modal-form">
       <div className="form-row"><label className="field-label" htmlFor="quick-amount">Amount</label><div className="amount-input-wrap"><span className="amount-prefix">$</span><input id="quick-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /><span className="amount-suffix">AUSD</span></div></div>
       <div className="ai-modal-mini"><div className="ai-composer-head"><span className="ai-composer-icon"><Sparkles size={14} /></span><div><strong>AI invoice copy</strong><small>Only this brief is sent · avoid secrets or payment data</small></div><select value={provider} onChange={(e) => setProvider(e.target.value as AIProvider)} aria-label="AI provider"><option value="kimi">Kimi</option><option value="qwen">Qwen</option><option value="hunyuan">Hunyuan</option></select></div><div className="ai-compose-controls"><input value={brief} onChange={(e) => setBrief(e.target.value)} maxLength={1400} placeholder="Describe the work…" /><button className="button button-soft button-xs" onClick={() => void runDraft()} disabled={aiBusy}>{aiBusy ? <LoaderCircle size={13} className="spin" /> : <Sparkles size={13} />} Draft</button></div></div>
+      <div className="form-two-col">
+        <div className="form-row"><label className="field-label" htmlFor="quick-plan">Payment plan</label><select id="quick-plan" className="field-input" value={installments} onChange={(e) => setInstallments(Number(e.target.value))}><option value={1}>Single payment</option><option value={2}>2 installments</option><option value={3}>3 installments</option><option value={6}>6 installments</option><option value={12}>12 installments</option></select></div>
+        <div className="form-row"><label className="field-label" htmlFor="quick-interval">Every</label><select id="quick-interval" className="field-input" value={intervalDays} disabled={installments <= 1} onChange={(e) => setIntervalDays(Number(e.target.value))}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option></select></div>
+      </div>
+      {planPreview && <div className="local-estimate"><div className="estimate-icon"><CalendarClock size={16} /></div><div><strong>Recurring payroll-style plan</strong><span>{planPreview}</span></div></div>}
       <div className="form-row"><label className="field-label" htmlFor="quick-title">Title</label><input id="quick-title" className="field-input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></div>
       <div className="form-row"><label className="field-label" htmlFor="quick-description">Description</label><textarea id="quick-description" className="field-input field-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={400} /></div>
       <div className="form-safety"><ShieldCheck size={15} /><span>Link expires in 7 days. The request is signed by your passkey; this does not move any funds.</span></div>
       {error && <div className="inline-error"><CircleHelp size={15} /> {error}</div>}
-      <button className="button button-dark full-button" disabled={busy} onClick={() => void create()}>{busy ? <LoaderCircle size={15} className="spin" /> : <LockKeyhole size={15} />}{account ? 'Sign & create link' : 'Connect passkey to continue'} <ArrowRight size={14} /></button>
+      <button className="button button-dark full-button" disabled={busy} onClick={() => void create()}>{busy ? <LoaderCircle size={15} className="spin" /> : <LockKeyhole size={15} />}{account ? (installments > 1 ? `Sign ${installments} installment links` : 'Sign & create link') : 'Connect passkey to continue'} <ArrowRight size={14} /></button>
       {!health.integrations?.ai?.[provider] && <p className="form-footnote">{provider.toUpperCase()} is not configured in this deployment. Local preview copy is not sponsor-model usage.</p>}
     </div>
   </Modal>;

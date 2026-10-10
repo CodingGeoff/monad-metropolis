@@ -29,8 +29,14 @@ describe('Mera-derived contact-book encryption', () => {
     const vault = await encryptContactBook(root, contacts);
     const wrongRoot = root.map((byte) => byte ^ 0xff);
     await expect(decryptContactBook(wrongRoot, vault)).rejects.toThrow(/unlock/i);
-    const tampered = { ...vault, ciphertext: `${vault.ciphertext.slice(0, -1)}A` };
+    // Flip a real ciphertext byte (not a base64 padding bit, which can decode to identical bytes).
+    const bytes = Uint8Array.from(Buffer.from(vault.ciphertext, 'base64url'));
+    bytes[bytes.length - 1] ^= 0x01;
+    const tampered = { ...vault, ciphertext: Buffer.from(bytes).toString('base64url') };
     await expect(decryptContactBook(root, tampered)).rejects.toThrow();
+    const ivTampered = Uint8Array.from(Buffer.from(vault.iv, 'base64url'));
+    ivTampered[0] ^= 0x01;
+    await expect(decryptContactBook(root, { ...vault, iv: Buffer.from(ivTampered).toString('base64url') })).rejects.toThrow();
   });
 
   it('rejects malformed vaults and over-large contact lists', async () => {
