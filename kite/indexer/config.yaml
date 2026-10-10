@@ -1,0 +1,20 @@
+# HyperIndex for real Agora AUSD transfers on Monad testnet.
+# Once deployed, Kite queries this GraphQL feed to power the Activity page.
+name: kite-ausd-transfers
+description: AUSD payment history for Kite on Monad testnet
+
+contracts:
+  - name: AUSD
+    abi_file_path: ./abis/AUSD.json
+    events:
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+        field_selection:
+          transaction_fields: [hash]
+
+chains:
+  - id: 10143 # Monad Testnet
+    start_block: 5726771 # AUSD proxy creation block on MonadScan
+    contracts:
+      - name: AUSD
+        address: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC"
+        start_block: 5726771

@@ -1,0 +1,16 @@
+# Kite's Render demo service. This is a testnet-only configuration.
+# Free instances sleep after inactivity; upgrade in Render before a live event if needed.
+services:
+  - type: web
+    name: kite-monad-payments
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "24.21.0"

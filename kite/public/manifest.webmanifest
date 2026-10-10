@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Kite — AUSD Payments",
+  "short_name": "Kite",
+  "description": "Passkey-native AUSD invoices and cross-border settlement on Monad.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f2",
+  "theme_color": "#173c34",
+  "icons": [
+    {
+      "src": "/kite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

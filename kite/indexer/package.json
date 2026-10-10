@@ -1,0 +1,27 @@
+{
+  "name": "kite-envio-indexer",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "envio": "3.14.0"
+  },
+  "overrides": {
+    "envio": {
+      "express": "4.22.3",
+      "viem": "2.57.4"
+    }
+  },
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "vitest": "4.1.11"
+  }
+}

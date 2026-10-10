@@ -1,0 +1,14 @@
+"""A standard ERC-20 AUSD transfer indexed from Monad testnet."""
+type Transfer
+  @index(fields: ["from", ["blockNumber", "DESC"]])
+  @index(fields: ["to", ["blockNumber", "DESC"]])
+{
+  id: ID!
+  from: String! @index
+  to: String! @index
+  value: BigInt!
+  chainId: Int!
+  blockNumber: Int!
+  timestamp: Int!
+  transactionHash: String! @index
+}
