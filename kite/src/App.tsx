@@ -16,7 +16,7 @@ import { runAIAssist, localDraftPreview, type AIProvider } from './lib/ai';
 import { loadContacts, saveContacts } from './lib/storage';
 import type { ContactRecord } from './lib/crypto';
 import { formatDate, friendlyError, initials, shortAddress } from './lib/format';
-import { planInstallments, signInstallmentPlan } from './lib/schedule';
+import { describeInstallment, planInstallments, signInstallmentPlan } from './lib/schedule';
 import type { PaymentRequest } from './lib/invoices';
 
 type PlanLink = { title: string; amount: string; dueAt: number; url: string };
@@ -110,6 +110,13 @@ function App() {
   const [pendingOutbound, setPendingOutbound] = useState<PendingTransfer | null>(restorePendingTransfer);
   const [requestOpen, setRequestOpen] = useState(false);
   const [planLinks, setPlanLinks] = useState<PlanLink[]>([]);
+  const handlePlanCreated = (requests: PaymentRequest[]) => {
+    setRequestOpen(false);
+    setPlanLinks(requests.map((r) => ({ title: r.title, amount: r.amount, dueAt: r.schedule?.dueAt ?? r.expiresAt, url: createShareUrl(r, window.location.origin) })));
+    setCreatedUrl('');
+    setActive('invoices');
+    showToast({ tone: 'success', text: `Payment plan signed · ${requests.length} installment links ready` });
+  };
   const [contactOpen, setContactOpen] = useState(false);
   const [initialRecipient, setInitialRecipient] = useState('');
   const [incomingRequest, setIncomingRequest] = useState<Awaited<ReturnType<typeof decodePaymentRequest>> | null>(null);
@@ -371,7 +378,7 @@ function App() {
             }}
             onCreated={(request, url) => { setCreatedUrl(url); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }}
             onCopy={async () => { try { await copyText(createdUrl); showToast({ tone: 'success', text: 'Payment link copied.' }); } catch { showToast({ tone: 'error', text: 'Clipboard is unavailable; select and copy the payment link.' }); } }}
-            showToast={showToast} planLinks={planLinks}
+            showToast={showToast} planLinks={planLinks} onPlanCreated={handlePlanCreated}
           />}
           {active === 'contacts' && <ContactsPage isLive={isLive} contacts={currentContacts} account={account} onConnect={() => setConnectOpen(true)} onAdd={() => setContactOpen(true)} onSelect={(contact) => { setActive('payments'); setSendOpen(true); setInitialRecipient(contact.address); }} />}
           {active === 'activity' && <ActivityPage isLive={isLive} transfers={isLive ? transfers : previewTransfers} feedSource={isLive ? feedSource : 'preview'} address={activeAddress} busy={chainBusy} refresh={() => void refreshLiveData()} onConnect={() => setConnectOpen(true)} />}
@@ -380,7 +387,7 @@ function App() {
       </main>
 
       {sendOpen && <SendModal account={account} snapshot={snapshot} contacts={currentContacts} initialRecipient={initialRecipient} pendingTransfer={pendingOutbound} onPendingTransfer={updatePendingOutbound} onClose={() => setSendOpen(false)} onConnect={() => setConnectOpen(true)} onSent={async (hash) => { updatePendingOutbound(null); setSendOpen(false); showToast({ tone: 'success', text: `Payment confirmed on Monad · ${shortAddress(hash, 8, 6)}` }); await refreshLiveData(); }} />}
-      {requestOpen && <RequestModal account={account} health={health} onClose={() => setRequestOpen(false)} onConnect={() => setConnectOpen(true)} onCreated={(request, url) => { setRequestOpen(false); setCreatedUrl(url); setActive('invoices'); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }} onPlanCreated={(requests) => { setRequestOpen(false); setPlanLinks(requests.map((r) => ({ title: r.title, amount: r.amount, dueAt: r.schedule?.dueAt ?? r.expiresAt, url: createShareUrl(r, window.location.origin) }))); setCreatedUrl(''); setActive('invoices'); showToast({ tone: 'success', text: `Payment plan signed · ${requests.length} installment links ready` }); }} showToast={showToast} />}
+      {requestOpen && <RequestModal account={account} health={health} onClose={() => setRequestOpen(false)} onConnect={() => setConnectOpen(true)} onCreated={(request, url) => { setRequestOpen(false); setCreatedUrl(url); setActive('invoices'); void createQrData(url).then(setQrData).catch(() => setQrData('')); showToast({ tone: 'success', text: `Signed invoice link created · ${formatAUSD(request.amount)} AUSD` }); }} onPlanCreated={handlePlanCreated} showToast={showToast} />}
       {contactOpen && <ContactModal account={account} contacts={contacts} onClose={() => setContactOpen(false)} onSave={(next) => { setContacts(next); setContactOpen(false); showToast({ tone: 'success', text: 'Contact encrypted on this device.' }); }} onConnect={() => setConnectOpen(true)} />}
       {connectOpen && <ConnectModal name={createName} setName={setCreateName} busy={authBusy} onClose={() => setConnectOpen(false)} onCreate={() => void finishConnect('create')} onSignin={() => void finishConnect('signin')} />}
       {toast && <div className={`toast toast-${toast.tone}`} role="status"><span className="toast-icon">{toast.tone === 'success' ? <CheckCircle2 size={17} /> : toast.tone === 'error' ? <CircleHelp size={17} /> : <Bell size={17} />}</span>{toast.text}<button onClick={() => setToast(null)} aria-label="Dismiss"><X size={14} /></button></div>}
@@ -584,6 +591,7 @@ function PaymentsPage(props: {
       <div className="request-review-top"><div className="request-shield"><ShieldCheck size={21} /></div><div><div className="eyebrow">SIGNED PAYMENT REQUEST</div><h2>{request.title}</h2></div><span className={`signature-pill ${props.requestVerified ? 'verified' : 'unverified'}`}>{props.requestVerified ? <><BadgeCheck size={14} /> Verified</> : <><CircleHelp size={14} /> Not verified</>}</span></div>
       {props.requestError && <div className="inline-error"><CircleHelp size={16} /> {props.requestError}</div>}
       <p className="request-description">{request.description}</p>
+      {request.schedule && <div className="form-safety"><CalendarClock size={15} /><span>{describeInstallment(request.schedule)}. This is one installment of a plan; pay only this one now.</span></div>}
       <div className="request-details"><div><span>Amount due</span><strong>{formatAUSD(request.amount)} <small>AUSD</small></strong><em>≈ {localEstimate(Number(formatUnits(BigInt(request.amount), 6)), 'JPY')} reference only</em></div><div><span>Pay to</span><strong className="mono">{shortAddress(request.payee, 8, 6)}</strong><a href={`${TESTNET_EXPLORER}/address/${request.payee}`} target="_blank" rel="noreferrer">View recipient <ExternalLink size={12} /></a></div><div><span>Invoice expires</span><strong>{new Date(request.expiresAt * 1000).toLocaleDateString()}</strong><em>On Monad testnet</em></div></div>
       <div className="request-safety"><LockKeyhole size={15} /><span>The sender signed the amount, recipient, title and description. Kite never auto-sends: you confirm each transfer.</span></div>
       {props.incomingPendingHash && <div className="form-safety"><Activity size={15} /><span>A payment transaction is already submitted. Do not send it again. <a className="text-link" href={`${TESTNET_EXPLORER}/tx/${props.incomingPendingHash}`} target="_blank" rel="noreferrer">View on MonadScan <ExternalLink size={12} /></a></span></div>}
@@ -602,8 +610,11 @@ function InvoicesPage(props: {
   isLive: boolean; account: KiteAccount | null; health: Health; onConnect: () => void; createdUrl: string; qrData: string;
   setCreated: (url: string) => Promise<void>; onCreated: (request: Awaited<ReturnType<typeof signPaymentRequest>>, url: string) => void;
   onCopy: () => void; showToast: (message: ToastMessage) => void; planLinks: PlanLink[];
+  onPlanCreated: (requests: PaymentRequest[]) => void;
 }) {
   const [amount, setAmount] = useState('250');
+  const [installments, setInstallments] = useState(1);
+  const [intervalDays, setIntervalDays] = useState(30);
   const [title, setTitle] = useState('Product design sprint');
   const [description, setDescription] = useState('Three days of product design and prototype feedback. Thank you for working with me.');
   const [currency, setCurrency] = useState('JPY');
@@ -650,6 +661,11 @@ function InvoicesPage(props: {
     try {
       const amountNumber = Number(amount);
       if (!Number.isFinite(amountNumber) || amountNumber <= 0) throw new Error('Enter a positive AUSD amount.');
+      if (installments > 1) {
+        const requests = await signInstallmentPlan(props.account.account, { payee: props.account.address, totalAmountText: amount, count: installments, intervalDays, title, description });
+        props.onPlanCreated(requests);
+        return;
+      }
       const request = await signPaymentRequest({ account: props.account.account, payee: props.account.address, amountText: amount, title, description });
       const url = createShareUrl(request, window.location.origin);
       props.onCreated(request, url);
@@ -664,12 +680,13 @@ function InvoicesPage(props: {
         <div className="section-heading"><div><div className="eyebrow">NEW PAYMENT REQUEST</div><h2>Invoice details</h2></div><span className="private-chip"><LockKeyhole size={12} /> Passkey-signed</span></div>
         <div className="ai-composer"><div className="ai-composer-head"><span className="ai-composer-icon"><Sparkles size={15} /></span><div><strong>Draft with AI</strong><small>Only this brief is sent · avoid secrets or payment data</small></div><select aria-label="AI provider" value={provider} onChange={(e) => setProvider(e.target.value as AIProvider)}><option value="kimi">Kimi</option><option value="qwen">Qwen</option><option value="hunyuan">Hunyuan</option></select></div><div className="ai-compose-controls"><input value={brief} onChange={(e) => setBrief(e.target.value)} maxLength={1400} placeholder="Describe the work and tone…" /><button className="button button-soft" onClick={() => void draft()} disabled={aiBusy}>{aiBusy ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}{aiBusy ? 'Writing…' : 'Draft'}</button></div>{aiBadge && <div className="ai-result-note"><CheckCircle2 size={12} /> {aiBadge}</div>}</div>
         <div className="form-row"><label className="field-label" htmlFor="invoice-amount">Amount</label><div className="amount-input-wrap"><span className="amount-prefix">$</span><input id="invoice-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} maxLength={14} placeholder="0.00" /><span className="amount-suffix">AUSD</span></div><div className="field-hint">Agora Dollar · settles on Monad testnet. No live currency conversion.</div></div>
+        <div className="form-two-col"><div className="form-row"><label className="field-label" htmlFor="invoice-plan">Payment plan</label><select id="invoice-plan" className="field-input" value={installments} onChange={(e) => setInstallments(Number(e.target.value))}><option value={1}>Single payment</option><option value={2}>2 installments</option><option value={3}>3 installments</option><option value={6}>6 installments</option><option value={12}>12 installments</option></select></div><div className="form-row"><label className="field-label" htmlFor="invoice-interval">Every</label><select id="invoice-interval" className="field-input" value={intervalDays} disabled={installments <= 1} onChange={(e) => setIntervalDays(Number(e.target.value))}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option></select></div></div>
         <div className="form-two-col"><div className="form-row"><label className="field-label" htmlFor="invoice-title">Invoice title</label><input className="field-input" id="invoice-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></div><div className="form-row"><label className="field-label" htmlFor="invoice-currency">Show local estimate in</label><select id="invoice-currency" className="field-input" value={currency} onChange={(e) => setCurrency(e.target.value)}>{DISPLAY_CURRENCIES.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></div></div>
         <div className="form-row"><div className="field-label-line"><label className="field-label" htmlFor="invoice-description">Recipient-facing note</label><button className="inline-action" disabled={translateBusy || !props.health.integrations?.ai?.qwen} onClick={() => void translate()}>{translateBusy ? <LoaderCircle size={12} className="spin" /> : <Globe2 size={12} />} Translate with Qwen</button></div><textarea className="field-input field-textarea" id="invoice-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={400} rows={3} /></div>
         <div className="local-estimate"><div className="estimate-icon"><Globe2 size={16} /></div><div><strong>Local view</strong><span>Approximate amount shown to the recipient</span></div><div className="estimate-amount">{localEstimate(Number(amount) || 0, currency)} <small>{currency}</small></div></div>
         <div className="form-safety"><ShieldCheck size={15} /><span>Kite signs invoice terms with EIP-712. A payer can verify the payee, amount, expiry and description before sending.</span></div>
         {!props.isLive && <div className="connect-inline"><KeyRound size={15} /><span>Connect a passkey to sign and share an invoice link.</span><button onClick={props.onConnect}>Connect</button></div>}
-        <button className="button button-dark full-button" disabled={busy} onClick={() => void create()}>{busy ? <LoaderCircle size={16} className="spin" /> : <LockKeyhole size={15} />}{busy ? 'Signing with Mera…' : props.isLive ? 'Sign & create payment link' : 'Connect passkey to continue'}<ArrowRight size={15} /></button>
+        <button className="button button-dark full-button" disabled={busy} onClick={() => void create()}>{busy ? <LoaderCircle size={16} className="spin" /> : <LockKeyhole size={15} />}{busy ? 'Signing with Mera…' : props.isLive ? (installments > 1 ? `Sign ${installments} installment links` : 'Sign & create payment link') : 'Connect passkey to continue'}<ArrowRight size={15} /></button>
         <p className="form-footnote">Each request expires in 7 days. The amount is always settled in AUSD; local currency is an estimate only.</p>
       </section>
       <aside className="invoice-side">

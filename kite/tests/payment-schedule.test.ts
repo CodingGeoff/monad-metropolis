@@ -5,7 +5,7 @@ import {
   MAX_INVOICE_AGE_SECONDS, MAX_SCHEDULE_WINDOW_SECONDS, decodePaymentRequest, encodePaymentRequest,
   signPaymentRequest, validatePaymentRequest, verifyPaymentRequest,
 } from '../src/lib/invoices';
-import { INSTALLMENT_GRACE_SECONDS, planInstallments, signInstallmentPlan, splitInstallments } from '../src/lib/schedule';
+import { INSTALLMENT_GRACE_SECONDS, describeInstallment, planInstallments, signInstallmentPlan, splitInstallments } from '../src/lib/schedule';
 
 const payer = privateKeyToAccount(`0x${'2'.repeat(64)}`);
 const payee = payer.address;
@@ -140,5 +140,11 @@ describe('backward compatibility of single invoices', () => {
     expect(request.detailsHash).toBe(legacyHash);
     expect(request.schedule).toBeUndefined();
     expect(await verifyPaymentRequest(request)).toBe(true);
+  });
+});
+
+describe('payer-facing installment label', () => {
+  it('shows position and UTC due date from the signed schedule', () => {
+    expect(describeInstallment({ index: 1, count: 3, dueAt: Date.UTC(2026, 10, 5) / 1000 })).toBe('Installment 2 of 3, due 2026-11-05 (UTC)');
   });
 });

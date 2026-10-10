@@ -2,6 +2,12 @@ import { formatUnits, isAddress, type Address, type Hex, type LocalAccount } fro
 import { MAX_SCHEDULE_INSTALLMENTS, normalizeInvoiceCopy, parseAUSDAmount, signPaymentRequest, type PaymentRequest } from './invoices';
 
 export const MIN_INSTALLMENTS = 2;
+
+/** Human-readable installment position and due date for a payer (UTC date). */
+export function describeInstallment(schedule: { index: number; count: number; dueAt: number }): string {
+  const due = new Date(schedule.dueAt * 1000).toISOString().slice(0, 10);
+  return `Installment ${schedule.index + 1} of ${schedule.count}, due ${due} (UTC)`;
+}
 export const MIN_INTERVAL_DAYS = 1;
 export const MAX_INTERVAL_DAYS = 31;
 /** Each installment stays payable for this long after its due date. */

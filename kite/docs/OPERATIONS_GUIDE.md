@@ -178,8 +178,8 @@ npm test              # 1 项：Transfer 事件处理
 
 ### 7.1 开户：创建 Mera passkey 账户
 
-1. 打开应用，点击右上角 **Connect passkey**（或侧边栏的连接按钮）。
-2. 在弹窗输入显示名称，选择**创建**。
+1. 打开应用，点击右上角 **Connect passkey**（或设置页的 **Create or sign in**）。
+2. 弹窗标题为 “A wallet that feels like you.”。在 **Name shown in your authenticator** 输入显示名称，点击 **Create passkey**；已有账户则点击 **Sign in**。
 3. 浏览器弹出系统 passkey 对话框（Face ID / Touch ID / Windows Hello / 安全密钥）。完成验证。
 4. 应用由 PRF 输出派生出钱包地址并显示在侧边栏。
 5. **不会出现助记词，也不需要浏览器插件。**
@@ -189,9 +189,9 @@ npm test              # 1 项：Transfer 事件处理
 ### 7.2 登录与锁定
 
 - 再次进入：选择**登录（signin）**，用同一 passkey 验证。
-- 锁定：点击侧边栏的锁图标或设置页的锁定。锁定会清零内存中的签名密钥与 PRF 根。
+- 锁定：点击右上角的 **Lock wallet** 图标，或设置页的 **Lock now**。锁定会清零内存中的签名密钥与 PRF 根。
 - 15 分钟无操作自动锁定。
-- 设置页的“忘记”只清除本浏览器里的凭证提示，不会删除你 passkey 里的凭证。
+- 设置页的 **Forget this browser hint** 只清除本浏览器里的凭证提示，不会删除你 passkey 里的凭证。
 
 ### 7.3 领取测试 MON（付 gas）
 
@@ -216,17 +216,17 @@ npm test              # 1 项：Transfer 事件处理
 
 ### 7.6 创建单张付款请求（签名链接）
 
-1. 进入**概览**页，点击右上角的请求付款入口（弹窗标题为 **Request payment**）。
+1. 进入**概览**页，点击右上角的 **New invoice** 按钮（弹窗标题为 **Request payment**）。
 2. 输入金额（AUSD）、标题、备注。可用“AI invoice copy”让 Kimi 或 Qwen 起草文案；未配置模型时会显示“本地预览，不计为赞助商模型调用”。
-3. 付款计划选择 **Single payment**。
-4. 点击 **Sign & create link**，passkey 签名（EIP-712）。
+3. 付款计划选择 **Single payment**（也可选 2 / 3 / 6 / 12 期）。
+4. 点击 **Sign & create payment link**，passkey 签名（EIP-712）。
 5. 生成链接与二维码，复制给付款人。
 
-> 发票页（侧边栏 Invoices）是另一个单张发票编辑器，带有 AI 与 Qwen 翻译，但**没有分期选项**。分期只在概览页的 Request payment 弹窗里。
+> 侧边栏 **Invoices** 页是另一个发票编辑器，带有 AI 与 Qwen 翻译，同样提供 **Payment plan**（1 / 2 / 3 / 6 / 12 期）与间隔（7 / 14 / 30 天）选择。概览弹窗与 Invoices 页共用同一套分期签名逻辑。
 
 ### 7.7 付款人如何支付
 
-1. 付款人打开链接（`/pay?r=...`）。应用会**自动验证签名**：签名者地址、链（10143）、代币（AUSD）、金额、备注哈希、过期时间。
+1. 付款人打开链接（`/pay?r=...`）。应用会**自动验证签名**：签名者地址、链（10143）、代币（AUSD）、金额、备注哈希、过期时间。分期请求会显示 **Installment N of M, due YYYY-MM-DD (UTC)**，付款人可据此看到第几期与到期日。
 2. 验签失败会显示“Invoice signature did not match. Do not send funds”，此时不要付款。
 3. 验签通过后，付款人连接自己的 passkey 账户（没有则创建），点击支付。
 4. 应用发送 AUSD `transfer`，显示交易哈希。确认后该请求标记为已支付。
@@ -252,13 +252,13 @@ npm test              # 1 项：Transfer 事件处理
 
 ### 8.1 商家（收款方）操作
 
-1. 概览页 → **Request payment**。
+1. 概览页 → **New invoice**（弹窗标题 **Request payment**），或侧边栏 **Invoices** 页。
 2. 输入**总金额**（例如 `300` AUSD）。
 3. 付款计划选择 **3 installments**，间隔选择 **30 days**。
 4. 弹窗底部会预览：`3 signed links · 100 AUSD each … due every 30 days`。
 5. 标题与备注会自动编号，例如 `Monthly retainer (1/3)`。
 6. 点击 **Sign 3 installment links**。passkey 连续签名 3 次。
-7. 应用跳到发票页，右侧出现 **Payment plan · 3 installments** 卡片，每期有标题、金额、到期时间和**复制**按钮。
+7. 应用生成付款计划卡片（**Payment plan · 3 installments**），每期有标题、金额、到期时间和**复制**按钮，每期有标题、金额、到期时间和**复制**按钮。
 8. 把 3 条链接分别发给付款人（或放到同一条消息里分次说明）。
 
 ### 8.2 付款人操作
@@ -387,9 +387,10 @@ npm test              # 1 项：Transfer 事件处理
 
 ## 13. Metropolis 提交清单与时间表
 
-**关键日期（以官方为准）：**
-- 官方页面写的提交截止日是 **2026 年 10 月 13 日**，未标注具体时刻与时区。
-- 另一来源 RiseIn 标注 10 月 12 日。以门户倒计时为准。
+**关键日期（两处来源不一致，必须以提交门户为准）：**
+- 官方 Metropolis 页面：提交截止 **2026 年 10 月 13 日**，未标注具体时刻与时区。
+- 第三方 RiseIn 页面：标注 **2026 年 10 月 12 日**。
+- 操作：登录提交门户，核对倒计时与截止时间（含时区）。门户显示的时间优先于本文档。
 - 评审 10 月 14–27 日；获奖公布 11 月 3 日。
 
 **建议内部截止：10 月 12 日（HKT）**，留出一天处理链接与视频问题。
@@ -447,7 +448,7 @@ npm test              # 1 项：Transfer 事件处理
 
 ## 16. 已知限制（诚实清单）
 
-1. **分期入口只在概览页的 Request 弹窗中。** 发票页是单张发票编辑器，没有分期选项。这是一个 UI 不一致，已记录，尚未统一。
+1. **分期入口已统一。** 概览弹窗（New invoice）与 Invoices 页都提供 Payment plan 与间隔选择，并共用同一个 `handlePlanCreated` 流程。付款人端显示第几期与到期日。注意：本次修改未在真实浏览器中完成端到端测试（见第 17 节）。
 2. **分期不是链上工资流合约。** 每期需要付款人手动签名。
 3. **没有可编程礼物（需要托管合约）**、没有 Chainlink CRE、没有 Nansen、没有 Cleanverse、没有 Privy 或 Dynamic。
 4. **Hunyuan** 只有文本接口，不满足 Kepler Plan 的多模态要求。
@@ -457,3 +458,12 @@ npm test              # 1 项：Transfer 事件处理
 8. **界面未做真机验证。** 分期 UI 目前只通过了构建与类型检查。
 9. **速率限制是内存级别的演示护栏**，不适合生产环境。
 10. **审计：** 本项目没有安全审计，不得用于真实资金。
+
+---
+
+## 17. 浏览器验证记录（本次）
+
+- **已验证：** 生产构建下首页可渲染，控制台无报错；按钮文字与弹窗文字与本文档一致（见第 7 节）。
+- **未验证：** passkey 注册（Create passkey）在沙箱的 headless Chromium 中会导致标签页崩溃，因此无法端到端测试：开户、分期签名、付款人支付、Invoices 页的分期选择。这些只通过了 `tsc --noEmit`、单元测试（49 项）与生产构建。
+- **下一步：** 在真实设备（Chrome 或 Safari，支持 PRF 的 passkey）上按第 7、8 节走一遍，并记录结果。
+- **提示：** WebAuthn 不接受 IP 地址作为 RP ID，本地测试请使用 `http://localhost:4180`，不要使用 `127.0.0.1`。
