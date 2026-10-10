@@ -102,6 +102,8 @@ Coverage includes signed installment plans (exact splitting, tamper-bound schedu
 - **No guarantees:** code alone cannot guarantee an award. Live sponsor service use, testnet transactions, a public demo/repo, video and portal submission must be completed by the participant.
 - The platform, exact prize values, rule wording, eligibility and deadline timezone are authoritative. Check the [Metropolis portal](https://hackathon.monad.xyz/) before submitting.
 - Short demo outline: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md); bounty matrix and gap list: [docs/BOUNTY_MAP.md](docs/BOUNTY_MAP.md).
+- 完整操作手册（本地运行、用户流程、分期付款、测试网实操、部署、赞助商开通、提交清单）：[docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md)。
+- 叠加 Privy / Dynamic 的完整分析与风险：[docs/AUTH_STACKING_ANALYSIS.md](docs/AUTH_STACKING_ANALYSIS.md)。
 - Metropolis 参赛完整中文操作手册（当前进度、奖金台账、portal/GitHub/部署/链上测试/集成/提交步骤）：[docs/METROPOLIS_PLAYBOOK.md](docs/METROPOLIS_PLAYBOOK.md)。
 
 ## License
