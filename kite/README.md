@@ -7,7 +7,7 @@
 ## Product flow
 
 1. Create or restore a wallet with a **Mera** WebAuthn passkey; no wallet extension, seed phrase prompt or custody server.
-2. Create a payment request in AUSD. Invoice copy can be drafted with Kimi and translated with Qwen when server keys are configured. Only the user-entered prose field is sent; structured payment amount, connected wallet, and signing data are not attached automatically. Review text before sending and do not enter secrets into the prompt.
+2. Create a payment request in AUSD, either as a single invoice or as a payroll-style plan of 2–12 installments. Each installment is a separately signed link. Invoice copy can be drafted with Kimi and translated with Qwen when server keys are configured. Only the user-entered prose field is sent; structured payment amount, connected wallet, and signing data are not attached automatically. Review text before sending and do not enter secrets into the prompt.
 3. Sign the request as typed data (EIP-712). The payer verifies the signature, chain, token, payee, amount, request text and expiry.
 4. The payer reviews and signs a direct Agora AUSD transfer from their own passkey-derived account.
 5. View AUSD transfers through **Envio HyperIndex** when configured, or recent Monad RPC logs as a bounded fallback.
@@ -82,7 +82,7 @@ Local HyperIndex development needs Docker and the Envio setup described in the [
 npm test
 ```
 
-Coverage includes deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation and RPC method allowlisting. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
+Coverage includes signed installment plans (exact splitting, tamper-bound schedule fields), deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation, RPC method allowlisting, and in-process server routing for Alchemy, Envio and Kimi/Qwen/Hunyuan using stubbed upstreams. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
 
 ## Security and privacy
 
@@ -95,13 +95,15 @@ Coverage includes deterministic Mera account derivation and signing-session zero
 
 ## Metropolis notes
 
-- **Chosen track:** Consumer Products & Payments.
+- **Chosen track:** Consumer Products & Payments (including payroll-style installment plans).
 - **Deployment:** `render.yaml` is a prepared Render Blueprint for the same-origin Express + Vite app; it has not been deployed. Netlify is possible through Functions, but needs an API adapter/rewrite. See the [full Metropolis playbook](docs/METROPOLIS_PLAYBOOK.md) for domain, HTTPS, phone and passkey steps.
 - **Target bounties:** Agora cross-border payments, both Mera bounties, Envio, Alchemy credits, Kimi credits; Qwen credits if a real API key is configured and shown.
 - **PWA/native:** the current build is an installable PWA, not a native iOS/Android binary. Ask Agora whether its final mobile-app criterion accepts a PWA.
 - **No guarantees:** code alone cannot guarantee an award. Live sponsor service use, testnet transactions, a public demo/repo, video and portal submission must be completed by the participant.
 - The platform, exact prize values, rule wording, eligibility and deadline timezone are authoritative. Check the [Metropolis portal](https://hackathon.monad.xyz/) before submitting.
 - Short demo outline: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md); bounty matrix and gap list: [docs/BOUNTY_MAP.md](docs/BOUNTY_MAP.md).
+- 完整操作手册（本地运行、用户流程、分期付款、测试网实操、部署、赞助商开通、提交清单）：[docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md)。
+- 叠加 Privy / Dynamic 的完整分析与风险：[docs/AUTH_STACKING_ANALYSIS.md](docs/AUTH_STACKING_ANALYSIS.md)。
 - Metropolis 参赛完整中文操作手册（当前进度、奖金台账、portal/GitHub/部署/链上测试/集成/提交步骤）：[docs/METROPOLIS_PLAYBOOK.md](docs/METROPOLIS_PLAYBOOK.md)。
 
 ## License
