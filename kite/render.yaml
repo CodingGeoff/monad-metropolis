@@ -4,6 +4,10 @@ services:
   - type: web
     name: kite-monad-payments
     runtime: node
+    # The app and package-lock.json live in kite/ inside this monorepo.
+    # Without rootDir, Render runs `npm ci` at the repo root, which has no
+    # lockfile, and npm fails with EUSAGE (the long usage dump in the log).
+    rootDir: kite
     plan: free
     region: singapore
     branch: main
