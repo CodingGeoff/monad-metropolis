@@ -118,6 +118,38 @@ describe('JSON-RPC proxy', () => {
     expect(upstreamCalls).toHaveLength(0);
   });
 
+  it('accepts viem-style requests that omit params (e.g. eth_blockNumber) and normalizes them', async () => {
+    upstreamHandler = () => json({ jsonrpc: '2.0', id: 9, result: '0x10' });
+    const res = await post('/api/rpc', { jsonrpc: '2.0', id: 9, method: 'eth_blockNumber' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 9, result: '0x10' });
+    expect(upstreamCalls.at(-1)?.init?.body).toBe(JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'eth_blockNumber', params: [] }));
+  });
+
+  it('allows block reads that viem uses for EIP-1559 fee estimation and transaction waiting', async () => {
+    upstreamHandler = () => json({ jsonrpc: '2.0', id: 10, result: null });
+    for (const method of ['eth_getBlockByNumber', 'eth_getBlockByHash']) {
+      const res = await post('/api/rpc', { jsonrpc: '2.0', id: 10, method, params: ['latest', false] });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('supports JSON-RPC batch arrays, validating every entry', async () => {
+    upstreamHandler = () => json([{ jsonrpc: '2.0', id: 1, result: '0x1' }, { jsonrpc: '2.0', id: 2, result: '0x2' }]);
+    const ok = await post('/api/rpc', [
+      { jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] },
+      { jsonrpc: '2.0', id: 2, method: 'eth_blockNumber' },
+    ]);
+    expect(ok.status).toBe(200);
+    expect(upstreamCalls).toHaveLength(1);
+    const bad = await post('/api/rpc', [
+      { jsonrpc: '2.0', id: 3, method: 'eth_chainId', params: [] },
+      { jsonrpc: '2.0', id: 4, method: 'eth_accounts' },
+    ]);
+    expect(bad.status).toBe(403);
+    expect(upstreamCalls).toHaveLength(1);
+  });
+
   it('turns upstream failures into a generic JSON-RPC error', async () => {
     upstreamHandler = () => { throw new Error('socket hang up'); };
     const res = await post('/api/rpc', { jsonrpc: '2.0', id: 8, method: 'eth_chainId', params: [] });

@@ -18,3 +18,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24.21.0"
+      # Server-only Alchemy key for the Monad testnet RPC proxy. Render prompts for the value
+      # (sync: false) so it is never committed. Leave empty to use the public Monad RPC.
+      - key: ALCHEMY_API_KEY
+        sync: false

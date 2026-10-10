@@ -14,7 +14,7 @@ export function createApp(options: AppOptions = {}) {
     'eth_chainId', 'eth_blockNumber', 'eth_getBalance', 'eth_call', 'eth_estimateGas',
     'eth_sendRawTransaction', 'eth_getTransactionCount', 'eth_gasPrice', 'eth_maxPriorityFeePerGas',
     'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getLogs', 'eth_getCode',
-    'eth_feeHistory', 'web3_clientVersion', 'net_version',
+    'eth_feeHistory', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'web3_clientVersion', 'net_version',
   ]);
 
   // Small process-local limits are a guardrail for the hackathon demo; use a shared store at scale.
@@ -76,33 +76,62 @@ export function createApp(options: AppOptions = {}) {
     });
   });
 
+  type RpcEnvelope = { jsonrpc: '2.0'; id: unknown; method: string; params: unknown[] };
+
+  // Validates one JSON-RPC request. Missing `params` is normalised to [] because viem omits it for
+  // no-argument methods such as eth_blockNumber; a non-array `params` is still rejected.
+  function parseRpcRequest(item: unknown): { ok: true; request: RpcEnvelope } | { ok: false; status: number; id: unknown; code: number; message: string } {
+    if (!item || Array.isArray(item) || typeof item !== 'object') {
+      return { ok: false, status: 400, id: null, code: -32600, message: 'Invalid JSON-RPC request.' };
+    }
+    const candidate = item as Record<string, unknown>;
+    const id = candidate.id ?? null;
+    if (candidate.jsonrpc !== '2.0' || typeof candidate.method !== 'string') {
+      return { ok: false, status: 400, id, code: -32600, message: 'Invalid JSON-RPC request.' };
+    }
+    if (candidate.params !== undefined && !Array.isArray(candidate.params)) {
+      return { ok: false, status: 400, id, code: -32600, message: 'Invalid JSON-RPC request.' };
+    }
+    const method = candidate.method;
+    const params = (candidate.params ?? []) as unknown[];
+    if (!allowedRpcMethods.has(method)) {
+      return { ok: false, status: 403, id, code: -32601, message: 'RPC method not enabled.' };
+    }
+    if (method === 'eth_sendRawTransaction' && (typeof params[0] !== 'string' || params[0].length > 250_000)) {
+      return { ok: false, status: 400, id, code: -32602, message: 'Invalid signed transaction.' };
+    }
+    return { ok: true, request: { jsonrpc: '2.0', id, method, params } };
+  }
+
   app.post('/api/rpc', rateLimit(300, 60_000), async (req, res) => {
-    const payload = req.body;
-    if (!payload || Array.isArray(payload) || typeof payload !== 'object' || payload.jsonrpc !== '2.0' || typeof payload.method !== 'string' || !Array.isArray(payload.params)) {
-      res.status(400).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32600, message: 'Invalid JSON-RPC request.' } });
+    const payload: unknown = req.body;
+    const isBatch = Array.isArray(payload);
+    if (isBatch && (payload.length === 0 || payload.length > 50)) {
+      res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid JSON-RPC request.' } });
       return;
     }
-    if (!allowedRpcMethods.has(payload.method)) {
-      res.status(403).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32601, message: 'RPC method not enabled.' } });
+    const items = isBatch ? payload : [payload];
+    const parsed = items.map(parseRpcRequest);
+    const failure = parsed.find((entry): entry is Extract<typeof entry, { ok: false }> => !entry.ok);
+    if (failure) {
+      res.status(failure.status).json({ jsonrpc: '2.0', id: failure.id, error: { code: failure.code, message: failure.message } });
       return;
     }
-    if (payload.method === 'eth_sendRawTransaction' && (typeof payload.params[0] !== 'string' || payload.params[0].length > 250_000)) {
-      res.status(400).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: 'Invalid signed transaction.' } });
-      return;
-    }
+    const requests = parsed.map((entry) => (entry as { ok: true; request: RpcEnvelope }).request);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 18_000);
     try {
       const upstream = await fetch(rpcUrl(), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(isBatch ? requests : requests[0]),
         signal: controller.signal,
       });
       const body = await upstream.text();
       res.status(upstream.status).type('application/json').send(body);
     } catch {
-      res.status(502).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32000, message: 'Monad RPC is temporarily unavailable.' } });
+      const firstId = requests[0]?.id ?? null;
+      res.status(502).json({ jsonrpc: '2.0', id: firstId, error: { code: -32000, message: 'Monad RPC is temporarily unavailable.' } });
     } finally {
       clearTimeout(timeout);
     }

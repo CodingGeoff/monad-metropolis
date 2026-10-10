@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeCheck,
-  Banknote, Bell, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, Copy,
+  Banknote, Bell, CalendarClock, Check, CheckCircle2, CircleHelp, Clock3, Copy,
   ExternalLink, Eye, FileText, Globe2, House, KeyRound, LoaderCircle, LockKeyhole,
   LogOut, Menu, MoreHorizontal, Plus, RefreshCw, Send, Settings2, ShieldCheck,
   Sparkles, UserRound, Users, Wallet, X, Zap,
@@ -16,6 +16,7 @@ import { runAIAssist, localDraftPreview, type AIProvider } from './lib/ai';
 import { loadContacts, saveContacts } from './lib/storage';
 import type { ContactRecord } from './lib/crypto';
 import { formatDate, friendlyError, initials, shortAddress } from './lib/format';
+import { copyToClipboard } from './lib/clipboard';
 import { describeInstallment, planInstallments, signInstallmentPlan } from './lib/schedule';
 import type { PaymentRequest } from './lib/invoices';
 
@@ -146,6 +147,16 @@ function App() {
   useEffect(() => () => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
   }, []);
+
+  const copyAddress = useCallback(async (address?: string) => {
+    if (!address) return;
+    try {
+      await copyToClipboard(address);
+      showToast({ tone: 'success', text: 'Wallet address copied.' });
+    } catch {
+      showToast({ tone: 'error', text: 'Clipboard is unavailable; select the address and copy it manually.' });
+    }
+  }, [showToast]);
   const updatePendingOutbound = useCallback((pending: PendingTransfer | null) => {
     setPendingOutbound(pending);
     try {
@@ -333,7 +344,7 @@ function App() {
         </div>
         <div className="profile-row">
           <div className="avatar avatar-dark">{isLive ? 'K' : 'D'}</div>
-          <div className="profile-meta"><strong>{isLive ? 'Passkey wallet' : 'Demo workspace'}</strong><span>{isLive && activeAddress ? shortAddress(activeAddress) : 'Preview only'}</span></div>
+          <div className="profile-meta"><strong>{isLive ? 'Passkey wallet' : 'Demo workspace'}</strong>{isLive && activeAddress ? <button className="address-copy" onClick={() => void copyAddress(activeAddress)} title="Copy wallet address" aria-label="Copy wallet address">{shortAddress(activeAddress)} <Copy size={11} /></button> : <span>Preview only</span>}</div>
           <button className="icon-button more-button" onClick={isLive ? lockAccount : () => setConnectOpen(true)} aria-label={isLive ? 'Lock wallet' : 'Connect wallet'}>{isLive ? <LockKeyhole size={16} /> : <MoreHorizontal size={18} />}</button>
         </div>
       </aside>
@@ -347,7 +358,7 @@ function App() {
           <div className="topbar-right">
             <span className={`network-pill ${isLive ? 'network-pill-live' : ''}`}><span className="pulse-dot" /> {isLive ? 'Monad testnet' : 'Interactive preview'}</span>
             {isLive ? (
-              <button className="wallet-chip" onClick={lockAccount}><span className="wallet-chip-dot"><KeyRound size={13} /></span><span>{shortAddress(activeAddress, 5, 4)}</span><ChevronDown size={14} /></button>
+              <button className="wallet-chip" onClick={() => void copyAddress(activeAddress)} title={`Copy wallet address ${activeAddress ?? ''}`} aria-label="Copy wallet address"><span className="wallet-chip-dot"><KeyRound size={13} /></span><span>{shortAddress(activeAddress, 5, 4)}</span><Copy size={13} /></button>
             ) : (
               <button className="button button-dark button-small" onClick={() => setConnectOpen(true)}><KeyRound size={14} /> Connect passkey</button>
             )}
@@ -382,7 +393,7 @@ function App() {
           />}
           {active === 'contacts' && <ContactsPage isLive={isLive} contacts={currentContacts} account={account} onConnect={() => setConnectOpen(true)} onAdd={() => setContactOpen(true)} onSelect={(contact) => { setActive('payments'); setSendOpen(true); setInitialRecipient(contact.address); }} />}
           {active === 'activity' && <ActivityPage isLive={isLive} transfers={isLive ? transfers : previewTransfers} feedSource={isLive ? feedSource : 'preview'} address={activeAddress} busy={chainBusy} refresh={() => void refreshLiveData()} onConnect={() => setConnectOpen(true)} />}
-          {active === 'settings' && <SettingsPage isLive={isLive} address={activeAddress} snapshot={snapshot} health={health} onConnect={() => setConnectOpen(true)} onLock={lockAccount} onForget={async () => { lockAccount(); const { forgetCredential } = await import('./lib/account'); forgetCredential(); showToast({ tone: 'info', text: 'This browser no longer remembers the passkey credential hint. Your authenticator credential was not deleted.' }); }} />}
+          {active === 'settings' && <SettingsPage isLive={isLive} address={activeAddress} snapshot={snapshot} health={health} onConnect={() => setConnectOpen(true)} onLock={lockAccount} onCopyAddress={() => void copyAddress(activeAddress)} onForget={async () => { lockAccount(); const { forgetCredential } = await import('./lib/account'); forgetCredential(); showToast({ tone: 'info', text: 'This browser no longer remembers the passkey credential hint. Your authenticator credential was not deleted.' }); }} />}
         </div>
       </main>
 
@@ -674,7 +685,7 @@ function InvoicesPage(props: {
   };
 
   return <>
-    <PageHeader eyebrow="INVOICES · SIGNED LINKS" title="Make the ask easy." description="Create a signed request. The payer sees what you signed before they send anything." action={props.createdUrl ? <button className="button button-light" onClick={() => { void navigator.clipboard.writeText(props.createdUrl).then(() => props.showToast({ tone: 'success', text: 'Payment link copied.' })).catch(() => props.showToast({ tone: 'error', text: 'Clipboard is unavailable; select and copy the link.' })); }}><Copy size={15} /> Copy link</button> : undefined} />
+    <PageHeader eyebrow="INVOICES · SIGNED LINKS" title="Make the ask easy." description="Create a signed request. The payer sees what you signed before they send anything." action={props.createdUrl ? <button className="button button-light" onClick={() => { void copyToClipboard(props.createdUrl).then(() => props.showToast({ tone: 'success', text: 'Payment link copied.' })).catch(() => props.showToast({ tone: 'error', text: 'Clipboard is unavailable; select and copy the link.' })); }}><Copy size={15} /> Copy link</button> : undefined} />
     <div className="invoice-grid">
       <section className="surface-card invoice-builder">
         <div className="section-heading"><div><div className="eyebrow">NEW PAYMENT REQUEST</div><h2>Invoice details</h2></div><span className="private-chip"><LockKeyhole size={12} /> Passkey-signed</span></div>
@@ -732,10 +743,10 @@ function ActivityPage({ isLive, transfers, feedSource, address, busy, refresh, o
   </>;
 }
 
-function SettingsPage({ isLive, address, snapshot, health, onConnect, onLock, onForget }: { isLive: boolean; address?: string; snapshot: Awaited<ReturnType<typeof readWalletSnapshot>> | null; health: Health; onConnect: () => void; onLock: () => void; onForget: () => void }) {
+function SettingsPage({ isLive, address, snapshot, health, onConnect, onLock, onForget, onCopyAddress }: { isLive: boolean; address?: string; snapshot: Awaited<ReturnType<typeof readWalletSnapshot>> | null; health: Health; onConnect: () => void; onLock: () => void; onForget: () => void; onCopyAddress: () => void }) {
   return <>
     <PageHeader eyebrow="SETTINGS · TRUST BY DESIGN" title="Your keys. Your call." description="Kite is a thin payment interface, not a custodian. Review how this workspace is configured." />
-    <section className="surface-card settings-card"><div className="settings-section-head"><span className="settings-icon"><KeyRound size={18} /></span><div><h2>Passkey account</h2><p>Mera WebAuthn PRF · self-custodial EOA · no seed phrase on this screen</p></div><span className={`settings-status ${isLive ? 'good' : ''}`}><span className="pulse-dot" /> {isLive ? 'UNLOCKED' : 'NOT CONNECTED'}</span></div><div className="settings-details"><div><span>Address</span><strong className="mono">{address ?? 'Connect a passkey to reveal'}</strong></div><div><span>Native gas balance</span><strong>{snapshot ? `${Number(formatUnits(snapshot.monBalance, 18)).toFixed(4)} MON` : '—'}</strong></div><div><span>Session behavior</span><strong>15-minute inactivity lock</strong></div><div><span>Secret storage</span><strong>Memory only · zeroed on lock</strong></div></div><div className="settings-actions">{isLive ? <><button className="button button-light" onClick={onLock}><LockKeyhole size={14} /> Lock now</button><button className="text-danger" onClick={onForget}><LogOut size={14} /> Forget this browser hint</button></> : <button className="button button-dark" onClick={onConnect}><KeyRound size={14} /> Create or sign in</button>}</div></section>
+    <section className="surface-card settings-card"><div className="settings-section-head"><span className="settings-icon"><KeyRound size={18} /></span><div><h2>Passkey account</h2><p>Mera WebAuthn PRF · self-custodial EOA · no seed phrase on this screen</p></div><span className={`settings-status ${isLive ? 'good' : ''}`}><span className="pulse-dot" /> {isLive ? 'UNLOCKED' : 'NOT CONNECTED'}</span></div><div className="settings-details"><div><span>Address</span><span className="address-line"><strong className="mono">{address ?? 'Connect a passkey to reveal'}</strong>{address && <button className="button button-soft button-xs" onClick={onCopyAddress}><Copy size={12} /> Copy address</button>}</span></div><div><span>Native gas balance</span><strong>{snapshot ? `${Number(formatUnits(snapshot.monBalance, 18)).toFixed(4)} MON` : '—'}</strong></div><div><span>Session behavior</span><strong>15-minute inactivity lock</strong></div><div><span>Secret storage</span><strong>Memory only · zeroed on lock</strong></div></div><div className="settings-actions">{isLive ? <><button className="button button-light" onClick={onLock}><LockKeyhole size={14} /> Lock now</button><button className="text-danger" onClick={onForget}><LogOut size={14} /> Forget this browser hint</button></> : <button className="button button-dark" onClick={onConnect}><KeyRound size={14} /> Create or sign in</button>}</div></section>
     <section className="surface-card settings-card"><div className="settings-section-head"><span className="settings-icon mint"><Globe2 size={18} /></span><div><h2>Network & providers</h2><p>Payment actions are constrained to Monad testnet (chain ID 10143).</p></div><span className="settings-status good">TESTNET ONLY</span></div><div className="settings-details"><div><span>Token</span><strong>AUSD · {shortAddress(AUSD_TESTNET)}</strong></div><div><span>RPC provider</span><strong>{health.rpcProvider === 'alchemy' ? 'Alchemy · server-side proxy' : 'Public Monad testnet RPC'}</strong></div><div><span>Envio HyperIndex</span><strong>{health.integrations?.envio ? 'Configured' : 'Fallback to recent RPC logs'}</strong></div><div><span>Latest observed block</span><strong>{snapshot ? snapshot.blockNumber.toLocaleString() : '—'}</strong></div></div><div className="settings-actions"><a className="text-link" href="https://faucet.monad.xyz/" target="_blank" rel="noreferrer">Monad testnet faucet <ExternalLink size={13} /></a><a className="text-link" href="https://docs.agora.finance/developer/contract-deployments" target="_blank" rel="noreferrer">AUSD contract references <ExternalLink size={13} /></a></div></section>
     <section className="surface-card settings-card"><div className="settings-section-head"><span className="settings-icon lilac"><Sparkles size={18} /></span><div><h2>AI integrations</h2><p>AI drafts copy only. It has no wallet key, transaction tool, or ability to send money.</p></div></div><div className="ai-provider-grid">{(['kimi','qwen','hunyuan'] as const).map((provider) => <div key={provider}><strong>{provider === 'kimi' ? 'Kimi' : provider === 'qwen' ? 'Qwen' : 'Hunyuan'}</strong><small>{health.integrations?.ai?.[provider] ? 'Server key configured' : 'Key not configured'}</small><span className={`provider-state ${health.integrations?.ai?.[provider] ? 'ready' : ''}`}>{health.integrations?.ai?.[provider] ? 'READY' : 'OFF'}</span></div>)}</div></section>
     <div className="bottom-note"><ShieldCheck size={14} /> Testnet tokens are valueless. Never paste a private key, recovery phrase, GitHub token or model API key into the app.</div>
@@ -927,7 +938,7 @@ function Modal({ title, subtitle, onClose, children }: { title: string; subtitle
 }
 
 function copyText(text: string) {
-  return navigator.clipboard.writeText(text);
+  return copyToClipboard(text);
 }
 
 export default App;
