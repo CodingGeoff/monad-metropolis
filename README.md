@@ -44,7 +44,9 @@ Built for **Monad Metropolis** · track: **Consumer Products & Payments**.
 | [`kite/server/`](kite/server/) | Express API: Alchemy JSON-RPC proxy with a method allowlist, Envio GraphQL reader, optional Kimi/Qwen/Hunyuan endpoints. Server-only secrets; `/api/health` reports providers without echoing keys. |
 | [`kite/indexer/`](kite/indexer/) | Envio **HyperIndex** config, GraphQL schema and handler for the real Agora AUSD `Transfer` event on Monad testnet. |
 | [`kite/docs/`](kite/docs/) | [Submission runbook](kite/docs/SUBMISSION_RUNBOOK.md) · [demo script](kite/docs/DEMO_SCRIPT.md) · [bounty map](kite/docs/BOUNTY_MAP.md) · [threat model](kite/docs/THREAT_MODEL.md) · [test matrix](kite/docs/TEST_MATRIX.md) |
-| [`mera-inspect/`](mera-inspect/) | A read-only copy of the published `@category-labs/mera@0.2.0` package, kept only so the WebAuthn/PRF ceremony could be inspected while integrating. **The app depends on the npm package, not this folder**, and it is not part of the build. Mera is © Category Labs, MIT OR Apache-2.0; both license texts are included. |
+
+Mera is consumed as the published npm dependency `@category-labs/mera@0.2.0` (© Category Labs,
+MIT OR Apache-2.0) — there is no vendored copy in this repository.
 
 ## Run it locally
 
