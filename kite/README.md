@@ -4,6 +4,10 @@
 
 > **Prototype / testnet only.** No real money. No security audit. Do not use for mainnet funds.
 
+**Live:** <https://kite-monad-payments.onrender.com/> · **Health:** [`/api/health`](https://kite-monad-payments.onrender.com/api/health) → `rpcProvider: "alchemy"`, `chainId: 10143`
+
+For the current submission status and the remaining steps, read [`docs/SUBMISSION_RUNBOOK.md`](docs/SUBMISSION_RUNBOOK.md).
+
 ## Product flow
 
 1. Create or restore a wallet with a **Mera** WebAuthn passkey; no wallet extension, seed phrase prompt or custody server.
@@ -96,8 +100,8 @@ Coverage includes signed installment plans (exact splitting, tamper-bound schedu
 ## Metropolis notes
 
 - **Chosen track:** Consumer Products & Payments (including payroll-style installment plans).
-- **Deployment:** `render.yaml` is a prepared Render Blueprint for the same-origin Express + Vite app; it has not been deployed. Netlify is possible through Functions, but needs an API adapter/rewrite. See the [full Metropolis playbook](docs/METROPOLIS_PLAYBOOK.md) for domain, HTTPS, phone and passkey steps.
-- **Target bounties:** Agora cross-border payments, both Mera bounties, Envio, Alchemy credits, Kimi credits; Qwen credits if a real API key is configured and shown.
+- **Deployment:** `render.yaml` is the Render Blueprint behind the live service at <https://kite-monad-payments.onrender.com/> — Node `24.21.0`, Singapore, `rootDir: kite`, `/api/health` health check, auto-deploy on commits to `main`. Netlify is possible through Functions, but needs an API adapter/rewrite. See the [full Metropolis playbook](docs/METROPOLIS_PLAYBOOK.md) for domain, HTTPS, phone and passkey steps.
+- **Target bounties:** Agora cross-border payments, both Mera bounties, Envio, Alchemy credits, Kimi credits; Qwen credits if a real API key is configured and shown. Only Alchemy currently has live server-side configuration; see the [submission runbook](docs/SUBMISSION_RUNBOOK.md) for what is still unproven.
 - **PWA/native:** the current build is an installable PWA, not a native iOS/Android binary. Ask Agora whether its final mobile-app criterion accepts a PWA.
 - **No guarantees:** code alone cannot guarantee an award. Live sponsor service use, testnet transactions, a public demo/repo, video and portal submission must be completed by the participant.
 - The platform, exact prize values, rule wording, eligibility and deadline timezone are authoritative. Check the [Metropolis portal](https://hackathon.monad.xyz/) before submitting.

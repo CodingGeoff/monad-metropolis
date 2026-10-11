@@ -29,20 +29,27 @@
 
 ## 1. 先看结论
 
+> **本节 2026-10-11 07:35 UTC 按实测重写。逐条证据见 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 第 1 节。**
+
 ### 目前可确认的成绩
 
-- Kite 的根应用和 Envio indexer 已完成本地实现和验证。使用 Node.js `v24.21.0` / npm `10.8.2` 时：根应用类型检查通过；根测试 **7 个文件、48 项测试通过**（含分期付款、服务端路由 in-process 测试）；生产构建通过；npm audit 未发现漏洞。`indexer/` 的 codegen、类型检查、handler 测试（1 项）和 audit 也通过。
+- **仓库已公开：** `github.com/CodingGeoff/monad-metropolis`，GitHub API 返回 `"private": false`。
+- **应用已上线：** <https://kite-monad-payments.onrender.com/> 由 `kite/render.yaml`（Node `24.21.0`、新加坡、`rootDir: kite`、`/api/health`、`main` 分支自动部署）部署，SPA 与同域 Express API 都在跑。
+- **Alchemy 已生效：** 线上 `/api/health` 返回 `{"status":"ok","chainId":10143,"rpcProvider":"alchemy","integrations":{"envio":false,"ai":{"kimi":false,"qwen":false,"hunyuan":false}}}`。
+- **生产环境的发票链路已实测通过：** 用仓库自带 `signPaymentRequest()` 真签一张 12.5 AUSD 的 EIP-712 发票，线上 `/pay?r=…` 打开后显示 **Verified**，金额、收款方、到期日均正确。
+- **质量检查（2026-10-11 在 Node `v22.22.3` / npm `10.9.8`、`--engine-strict=false` 下重跑）：** `npm test` → **7 个文件 / 49 项测试全部通过**；`npm run build`（`tsc --noEmit` + `vite build`）通过；根包与 `indexer/` 的 `npm audit` 均 0 漏洞。注意这不是项目声明的 Node 24 环境，虽然全部通过，README 的运行要求仍以 Node 24 为准。
+- **Agora 水龙头已核实可用：** 合约 `0xd236c18D…65a73ee6C` 共 649 笔交易，`requestFunds` 每次固定转出 **10,000 AUSD**（实测 tx `0xc4ce2d3f…e516`，手续费 0.0133212 MON，Success）。
 - 产品核心方向是：商家创建一张 AUSD 付款请求，付款人检查收款方、金额、币种和期限后，用 Mera passkey 签名并在 Monad Testnet 转账。通讯录使用独立派生密钥在用户浏览器加密。
-- 本轮已准备 Render Blueprint（根目录 `render.yaml`）：Node `24.21.0`、新加坡区域、Free demo plan、`/api/health` health check；它只是可导入的配置，**没有**连接 repo、创建 Render service、取得 live HTTPS URL 或做线上 smoke test。
-- 有 AUSD Transfer 的 Envio config/schema/handler 和本地测试；但目前没有 Envio Cloud 部署。应用有 Alchemy/Kimi/Qwen 接口代码；目前没有配置实际服务密钥，也没有实际 provider 调用。
 
 ### 现在还不能声称完成的事
 
-- 目前没有 Metropolis 注册、项目 profile、bounty 选择或正式提交。
-- 没有公开 GitHub repo、有效的 Git commit history、GitHub remote、公开 demo 域名、demo 视频或 submission confirmation。
-- 没有真人设备上的 Mera PRF 测试；没有已完成的 AUSD 测试网用户间交易和 transaction hash。
-- 当前健康检查曾显示 chain ID `10143`、RPC 为 `public`、Envio/Kimi/Qwen 等 integration 关闭。这只是本地服务/配置检查，**不等于**真的调用了 sponsor API，也不等于链上转账成功。
-- 先前有一个 GitHub PAT 曾暴露在对话中。没有使用或保存它；请先按第 7 节撤销。不要把新的 PAT、钱包私钥、助记词或 API key 发到对话或写进公开 repo。
+- **演示钱包 `0xba7cd500C6CbE528eEBA123583de0B09B8f109dB` 有 10 MON，但 AUSD 余额为 0**（MonadScan 以 holder 过滤显示 `0 AUSD`，且 `Transactions Sent: Latest N/A`）。**这是唯一阻塞录制的硬缺口**——点一次应用内 Test AUSD 即可解决。
+- 没有已完成的 AUSD 测试网用户间交易和 transaction hash。
+- 没有 Metropolis 注册、项目 profile、bounty 选择或正式提交；没有 demo 视频。
+- 没有真人设备上的 Mera PRF 测试（沙箱无 authenticator，无法代做）。
+- `envio: false`，没有 Envio Cloud 部署；Kimi/Qwen/Hunyuan 均 `false`，没有真实 provider 调用。无 key 时的本地文案预览**不算** sponsor 使用。
+- `rpcProvider: "alchemy"` 只证明服务端 `ALCHEMY_API_KEY` 非空并走了对应分支，**不等于** Alchemy 接受了这个 key。第一次真机读余额成功才算闭环；申报前还要有 dashboard usage 截图。
+- 先前有一个 GitHub PAT 曾暴露在对话中。没有使用或保存它；请按第 7 节撤销。不要把新的 PAT、钱包私钥、助记词或 API key 发到对话或写进公开 repo。
 
 ### 最重要的排序
 

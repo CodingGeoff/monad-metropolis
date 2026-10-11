@@ -1,30 +1,67 @@
-# Three-minute demo script (draft)
+# Demo script
 
-## 0:00–0:25 — Problem and user
-"A solo designer can finish work for a client in another country and still wait days for a bank transfer, lose money to opaque FX and invoice manually. Kite turns the payment request into the shortest part of the job."
+> The shot-by-shot version with timings, pre-recording checklist and failure handling lives in
+> [`SUBMISSION_RUNBOOK.md`](SUBMISSION_RUNBOOK.md) §3. This file is the narration skeleton.
+>
+> **Rule:** never narrate an integration that is not live. At the time of writing the deployed
+> service reports `envio: false` and all AI providers `false`; `rpcProvider` is `alchemy`. Cut the
+> Envio and Kimi/Qwen beats until those are actually configured and exercised.
 
-## 0:25–0:55 — Passkey onboarding
-Create or sign in with a Mera passkey. Show the Monad testnet wallet address and explain that the EOA is derived client-side; the app never handles a recovery phrase or custody backend.
+## 0:00–0:20 — Problem and user
+"A solo designer can finish work for a client in another country and still wait days for a bank
+transfer, lose money to opaque FX, and invoice manually. Kite turns the payment request into the
+shortest part of the job."
 
-## 0:55–1:35 — Make an invoice
-Type a short brief. Use the configured Kimi provider to draft an invoice title/description; optionally use Qwen to localize recipient-facing copy. Edit the amount manually. Explain that the structured amount and connected wallet are not attached automatically and the model has no signing tools; user-entered free text is sent as-is, so avoid secrets or payment data.
+## 0:20–0:50 — Passkey onboarding
+Create or sign in with a Mera passkey. Show the Monad testnet address and explain that the EOA is
+derived client-side from PRF output. No extension, no recovery phrase, no custody backend. Say
+"passkey with PRF" explicitly — a plain WebAuthn credential is not the same thing.
 
-## 1:35–2:05 — Share and verify
-Sign the request with EIP-712, show the QR/link, open it in a private window, and show the verified signature, exact amount, recipient and expiry.
+## 0:50–1:05 — Where the chain access goes
+Show `/api/health`. Every browser read and every signed broadcast goes through the same-origin
+`/api/rpc` proxy, backed by Alchemy's Monad testnet endpoint. Health reports the provider name and
+never echoes the key.
 
-## 2:05–2:35 — Settle AUSD
-Use a funded Monad testnet passkey account to pay the request. Show a real AUSD transfer hash and the testnet explorer receipt. Do not use a screenshot or seeded fake hash as live proof.
+## 1:05–1:35 — Make an invoice
+Type a short brief and an amount. Sign it. Explain that Kite signs invoice terms with EIP-712, and
+that in a payment plan each installment is its own signature bound to plan ID, index, count and due
+date. If Kimi/Qwen are configured, show the model drafting or translating copy and then show a human
+editing it — and say plainly that only user-entered prose is sent, never the amount or the wallet.
 
-## 2:35–2:55 — Data and privacy
-Show the Activity page reading the event through Envio HyperIndex, then show the encrypted contact-book payload contains only ciphertext. Mention Alchemy as the server-side Monad RPC provider if that key is configured.
+## 1:35–1:50 — Share and verify
+Show the QR/link, open it in a private window, and show the **Verified** badge with the exact amount,
+recipient, token and expiry. Mention that altering any signed field or letting it expire disables the
+payment button.
 
-## 2:55–3:00 — Close
-"Kite makes cross-border AUSD settlement feel like sending an invoice, not learning a blockchain. The payment is on Monad; custody stays with the people doing the work."
+## 1:50–2:15 — Settle AUSD
+Use a funded Monad testnet passkey account to pay. Show pending → confirmed and let the real elapsed
+time stand; do not cut it to look faster.
+
+## 2:15–2:30 — On-chain proof
+Open `https://testnet.monadscan.com/tx/<hash>`. Hold on Success and on the `Transfer` event's
+from / to / value long enough to read. Never substitute a screenshot or a seeded hash.
+
+## 2:30–2:45 — One passkey, many keys
+Open DevTools and show that `kite:encrypted-address-book:v1` in `localStorage` is ciphertext only.
+Lock, re-authenticate with the same passkey, and show the contacts decrypt. Then show the Activity
+page and name its source honestly — "indexed by Envio" only if the hosted indexer is configured,
+otherwise "direct Monad RPC logs".
+
+## 2:45–2:55 — Close
+"This is a Monad testnet prototype; test assets have no monetary value and there is no fiat
+off-ramp. Kite makes cross-border AUSD settlement feel like sending an invoice, not learning a
+blockchain. The payment is on Monad; custody stays with the people doing the work."
 
 ## Recording checklist
 
-- Use a real phone viewport or installed PWA and disclose whether the build is a PWA vs native app.
-- Keep the QR, payment link, wallet address, transaction hash and explorer visible long enough to verify.
-- Show testnet labels and say test assets have no monetary value.
-- Record no secrets, account tokens, environment files or API keys.
-- If an integration is not live, call it out; do not narrate a planned integration as shipped.
+- Record on a real phone viewport or an installed PWA, and disclose that it is a PWA rather than a
+  native binary.
+- Warm the service up first: the Render free plan sleeps after 15 idle minutes and cold-starts in
+  30–60 seconds.
+- Keep the QR, payment link, wallet address, transaction hash and explorer receipt on screen long
+  enough to verify.
+- Show the testnet labels and say the test assets have no monetary value.
+- Record no secrets: private keys, mnemonics, PRF output, `.env` files, API keys, provider
+  dashboards showing a key.
+- Publish the video where an unauthenticated reviewer can open it, and test that in a private window.
+- If an integration is not live, cut the beat. Do not narrate a planned integration as shipped.
