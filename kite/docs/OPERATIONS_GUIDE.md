@@ -1,6 +1,10 @@
 # Kite 完整操作手册（Metropolis 参赛版）
 
-> 版本日期：2026-10-10（Asia/Tokyo 用户时区）。本手册对应分支 `arena/3f4be6ab-monad-metropolis` 的当前代码（分期付款、服务端拆分、48 项自动化测试）。
+> 版本日期：2026-10-11（UTC 核对）。本手册描述当前 `main` 分支的代码（分期付款、服务端拆分、**49** 项自动化测试）。
+>
+> **⚠️ 距离截止不到 48 小时，请直接按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 执行。** 本手册是背景参考和详细操作说明，不是冲刺清单。
+>
+> **已上线：** <https://kite-monad-payments.onrender.com/>，`/api/health` 返回 `rpcProvider: "alchemy"`、`chainId: 10143`；`envio` 与三项 AI provider 仍为 `false`。
 >
 > **定位声明：** Kite 是 Monad **测试网**上的原型，未经审计，不得用于真实资金。测试网 AUSD 与 MON 没有货币价值。
 
@@ -141,7 +145,7 @@ NODE_ENV=production PORT=4174 npm start
 
 ```bash
 npx tsc --noEmit      # 类型检查（含 tests/）
-npm test              # 7 个文件 · 48 项测试（只扫描 tests/）
+npm test              # 7 个文件 · 49 项测试（只扫描 tests/）
 npm run build         # tsc + vite 生产构建
 npm audit --omit=dev  # 应显示 0 vulnerabilities
 ```
@@ -291,9 +295,9 @@ npm test              # 1 项：Transfer 事件处理
 这是 Agora、Mera、Envio 等 bounty 的核心证据，必须由你本人完成。
 
 **准备：**
-- 两个 passkey 账户（商家 A、付款人 B）。可以用两台设备，或同一设备两个不同浏览器配置。注意：同一域名、同一 passkey 才能恢复同一账户。
-- A、B 各领取测试 MON（付 gas）。
-- A 领取测试 AUSD，并把 AUSD 转给 B 一部分（或 B 自己领取）。
+- 两个 passkey 账户（商家 A、付款人 B）。可以用两台设备，或同一设备两个不同浏览器 profile。**注意：Kite 在 `localStorage` 里只保存一个 credential 提示（`kite:mera-credential:v1`），同一 profile 里新建第二个 passkey 会覆盖它，之后"登录"只会回到最新那个账户——所以两个账户必须放在两个 profile 或两台设备上。**
+- A、B 各领取测试 MON（付 gas，[faucet.monad.xyz](https://faucet.monad.xyz/)）。
+- **A、B 各自在应用内点一次 `Test AUSD`**。Agora 水龙头 `requestFunds` 每次固定发 **10,000 AUSD**，手续费约 0.013 MON，两个账户互不影响，不需要 A 转给 B。
 
 **步骤：**
 1. 在 A 上创建一张 `1` AUSD 的单张请求，复制链接。
