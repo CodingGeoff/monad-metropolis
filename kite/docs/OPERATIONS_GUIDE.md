@@ -1,6 +1,6 @@
 # Kite 完整操作手册（Metropolis 参赛版）
 
-> 版本日期：2026-10-11（UTC 核对）。本手册含有历史 `main` 状态；RPC 回归与当前修复/生产部署状态以 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 为准。本工作分支已增加 RPC failover 和 52 项自动化测试。
+> 版本日期：2026-10-11（UTC 核对）。本手册含有历史 `main` 状态；RPC 回归与当前修复/生产部署状态以 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 为准。本工作分支已增加 RPC failover 和 53 项自动化测试。
 >
 > **⚠️ 距离截止不到 48 小时，请直接按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 执行。** 本手册是背景参考和详细操作说明，不是冲刺清单。
 >
@@ -146,7 +146,7 @@ NODE_ENV=production PORT=4174 npm start
 
 ```bash
 npx tsc --noEmit      # 类型检查（含 tests/）
-npm test              # 7 个文件 · 52 项测试（只扫描 tests/）
+npm test              # 7 个文件 · 53 项测试（只扫描 tests/）
 npm run build         # tsc + vite 生产构建
 npm audit --omit=dev  # 应显示 0 vulnerabilities
 ```
@@ -169,7 +169,7 @@ npm test              # 1 项：Transfer 事件处理
 | `payment-schedule.test.ts` | 分期拆分精确求和、到期日间隔、篡改期数/到期日被拒、单张发票哈希向后兼容（12 项） |
 | `contact-crypto.test.ts` | AES-GCM 往返、随机 IV、错误密钥与密文篡改拒绝 |
 | `account-derivation.test.ts` | 同一 PRF 输出得到稳定地址，会话结束后清零 |
-| `server-api.test.ts` | 健康检查不泄密、Alchemy 路由、RPC 白名单与故障切换、Envio 端点校验、Kimi/Qwen/Hunyuan 请求形态（桩上游，21 项） |
+| `server-api.test.ts` | 健康检查不泄密、Alchemy 路由、RPC 白名单与故障切换、真实 viem 写交易路径（faucet `requestFunds` + AUSD `transfer` 经代理广播，覆盖写路径需要的 `eth_getBlockByNumber`）、Envio 端点校验、Kimi/Qwen/Hunyuan 请求形态（桩上游，22 项） |
 | `api.test.ts` | 启动真实服务进程的冒烟测试 |
 | `ai-schema.test.ts` | AI 输入上限与禁止金额/地址字段 |
 
@@ -186,6 +186,16 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 ```
 
 期望 HTTP `200`、JSON `result: "0x279f"`（十进制 `10143`），且响应头给出 `x-kite-rpc-provider` / `x-kite-rpc-fallback-used`。`/api/health` 的 provider 字段只表示**优先配置**，不代表上游已连通。若这里返回 502，应用已尝试所有可用的测试网节点；稍后重试并检查 Render 日志/服务状态，不要把 `eth_chainId` 错误误判成 faucet、金额或 passkey 错误。
+
+再验证写交易路径需要的区块读取——用户点 **Test AUSD** 报 `The method "eth_getBlockByNumber" does not exist / is not available.` 就是这个请求被拒的直接证据：
+
+```bash
+curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
+  -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"eth_getBlockByNumber","params":["latest",false]}'
+```
+
+期望 HTTP `200` 且 `result` 里有区块字段。若返回 `403` + `{"code":-32601,"message":"RPC method not enabled."}`，说明线上仍是缺该方法的旧 allowlist：部署本分支后用应用内 **Test AUSD** 复核。同时用 `{"method":"eth_accounts","params":[]}` 确认钱包级方法仍返回 `403`——allowlist 是补全而不是放开。
 
 ---
 
@@ -330,7 +340,7 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 
 ## 10. 部署上线（Render）
 
-**当前状态：** <https://kite-monad-payments.onrender.com/> 已在线；Blueprint 跟踪 `main`，本 Arena 分支的 RPC hotfix 尚未部署。更新现有服务时不要创建重复 Blueprint；按仓库发布流程部署后，先用第 6 节无 `params` `eth_chainId` smoke test 确认 `0x279f`，再做真机/链上验证。
+**当前状态：** <https://kite-monad-payments.onrender.com/> 已在线；Blueprint 跟踪 `main`，本 Arena 分支的两项 RPC 修复（可选 `params`、写交易路径的 `eth_getBlockByNumber`）尚未部署。更新现有服务时不要创建重复 Blueprint；按仓库发布流程部署后，先用第 6 节无 `params` `eth_chainId` smoke test 确认 `0x279f`、再用 `eth_getBlockByNumber` 与 **Test AUSD** 确认写路径不再返回 `-32601`，然后做真机/链上验证。
 
 仓库根目录的 `kite/render.yaml` 是 Render Blueprint：Node 24.21.0、新加坡区域、免费套餐、健康检查 `/api/health`。以下只适用于新建或重建 service：
 
@@ -341,7 +351,7 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 4. 设置 `VITE_MERA_RP_ID` 为最终域名（例如 `kite-monad-payments.onrender.com`），然后触发部署。它是构建期变量，改动后需要重新构建。
 5. 部署完成后验证：
    - `https://<域名>/api/health` 返回 `status: ok`（仅服务/配置检查）；
-   - 按本指南第 6 节 RPC smoke test 用**省略 `params`** 的 `eth_chainId` 检查返回 `0x279f` 和 provider 响应头；
+   - 按本指南第 6 节 RPC smoke test 用**省略 `params`** 的 `eth_chainId` 检查返回 `0x279f` 和 provider 响应头，并用 `eth_getBlockByNumber` 确认写交易路径所需方法不再被 `-32601` 拒绝；
    - `https://<域名>/` 能打开，控制台没有 CSP 报错；
    - 在手机 Safari / Chrome 上完成一次 passkey 创建。
 
@@ -360,7 +370,7 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 
 1. 在 Alchemy 控制台创建 **Monad Testnet** 应用，复制 API key。
 2. 在 Render 环境变量中设置 `ALCHEMY_API_KEY`，重启服务。
-3. `/api/health` 的 `rpcProvider: alchemy` 仅证明配置；再用第 6 节的无 `params` `eth_chainId` curl 检查 `0x279f` 和 `x-kite-rpc-provider` 响应头。
+3. `/api/health` 的 `rpcProvider: alchemy` 仅证明配置；再用第 6 节的无 `params` `eth_chainId` curl 检查 `0x279f` 和 `x-kite-rpc-provider` 响应头，并跑第二个 `eth_getBlockByNumber` curl 确认写路径方法可用。
 4. 证据：Alchemy 控制台真实请求统计截图 + 应用内一次余额读取；若 `x-kite-rpc-fallback-used: true`，该请求实际上由备用节点完成，不能把它算作 Alchemy 使用证据。
 
 ### 11.2 Envio（Best Use of Envio）
@@ -446,6 +456,7 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 | passkey 创建失败 / 无提示 | 不在安全上下文（非 localhost 或 HTTPS），或设备不支持 PRF。换 Chrome/Safari 最新版，在真机测试 |
 | 登录后地址与之前不一样 | 域名变了，或 `VITE_MERA_RP_ID` 改过。passkey 与域名绑定，无法跨域恢复 |
 | `/api/rpc` 返回 `Invalid JSON-RPC request`，body 显示 `eth_chainId` | 老部署把可选的 JSON-RPC `params` 当成必填。部署包含代理修复的版本后，用无 `params` smoke test 验证；不是 AUSD/faucet 错误 |
+| 点 **Test AUSD** 弹 `The method "eth_getBlockByNumber" does not exist / is not available.`（`-32601`） | 老部署的 method allowlist 没有放行 viem 写交易前必须的区块读取（`prepareTransactionRequest` 用它判断交易类型、估算 EIP-1559 费用），所以签名前就被本机代理拒绝，链上无交易。部署含 `eth_getBlockByNumber` 的版本，用第 6 节第二个 curl 确认返回 200，再点按钮；不要重领 MON 或怀疑 passkey |
 | 余额显示 `—` / `/api/rpc` 502 | 查看 `x-kite-rpc-attempts` 与 Render 日志。本分支修复版会依次尝试 Alchemy、配置备份和 Monad 公共节点并校验 chain ID；仅在该版本部署后线上才具备此行为。检查部署版本/环境变量，或稍后刷新。若刚签名广播，先查链上状态再重发 |
 | 交易显示 insufficient funds | 没有 MON 付 gas，去 faucet.monad.xyz 领取 |
 | 发送后提示“仍在等待” | 交易未确认。不要重复发送，用同一哈希在 explorer 查询 |
@@ -488,6 +499,6 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 ## 17. 浏览器验证记录（本次）
 
 - **已验证：** 生产构建下首页可渲染，控制台无报错；按钮文字与弹窗文字与本文档一致（见第 7 节）。
-- **未验证：** passkey 注册（Create passkey）在沙箱的 headless Chromium 中会导致标签页崩溃，因此无法端到端测试：开户、分期签名、付款人支付、Invoices 页的分期选择。这些只通过了 `tsc --noEmit`、单元测试（52 项）与生产构建。
+- **未验证：** passkey 注册（Create passkey）在沙箱的 headless Chromium 中会导致标签页崩溃，因此无法端到端测试：开户、分期签名、付款人支付、Invoices 页的分期选择。这些只通过了 `tsc --noEmit`、单元测试（53 项）与生产构建。
 - **下一步：** 在真实设备（Chrome 或 Safari，支持 PRF 的 passkey）上按第 7、8 节走一遍，并记录结果。
 - **提示：** WebAuthn 不接受 IP 地址作为 RP ID，本地测试请使用 `http://localhost:4180`，不要使用 `127.0.0.1`。

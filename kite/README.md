@@ -94,7 +94,7 @@ Local HyperIndex development needs Docker and the Envio setup described in the [
 npm test
 ```
 
-Coverage includes signed installment plans (exact splitting, tamper-bound schedule fields), deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation, RPC method allowlisting, real viem `eth_chainId` routing with omitted params, chain-ID-checked RPC failover and in-process server routing for Alchemy, Envio and Kimi/Qwen/Hunyuan using stubbed upstreams. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
+Coverage includes signed installment plans (exact splitting, tamper-bound schedule fields), deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation, RPC method allowlisting, real viem `eth_chainId` routing with omitted params, the real viem signed write path (faucet claim and AUSD transfer) including the block read fee estimation needs, chain-ID-checked RPC failover and in-process server routing for Alchemy, Envio and Kimi/Qwen/Hunyuan using stubbed upstreams. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
 
 ## Security and privacy
 
