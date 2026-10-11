@@ -18,6 +18,7 @@ export function friendlyError(error: unknown) {
   if (/insufficient funds/i.test(message)) return 'Not enough MON for testnet gas. Get free test MON from the Monad faucet, then retry.';
   if (/already requested|frequency|cooldown|too soon/i.test(message)) return 'The test AUSD faucet is rate limited. Try again in about a minute.';
   if (/Invalid JSON-RPC request/i.test(message)) return 'The app is talking to an outdated RPC proxy. Refresh after the latest deployment; if you signed a transaction, check MonadScan before trying again.';
+  if (/does not exist \/ is not available|RPC method not enabled/i.test(message)) return 'The RPC proxy refused a method this wallet needs (usually an older server build). Reload after the latest deployment; nothing was broadcast unless you already signed — check MonadScan if unsure.';
   if (/All Monad testnet RPC providers|Monad RPC is temporarily unavailable/i.test(message)) return 'Monad testnet RPC is temporarily unavailable. No transaction is confirmed; if this happened after signing, check MonadScan before resubmitting.';
   return message.slice(0, 240);
 }

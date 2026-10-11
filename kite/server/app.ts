@@ -11,11 +11,21 @@ export type AppOptions = {
 
 export function createApp(options: AppOptions = {}) {
   const app = express();
+  // Read-only surface this app's viem client actually needs. Wallet-level calls
+  // (`eth_accounts`, `eth_signTransaction`, `personal_*`, `wallet_*`) and node
+  // management (`debug_*`, `admin_*`, `txpool_*`) stay blocked.
+  //
+  // `eth_getBlockByNumber` must remain listed: viem's write path (writeContract ->
+  // sendTransaction -> prepareTransactionRequest) reads the latest block to infer
+  // the transaction type and to estimate EIP-1559 fees. Without it every signed
+  // action — the "Test AUSD" faucet claim, "Send AUSD" and invoice settlement —
+  // fails in the browser with a -32601 `MethodNotFoundRpcError` that looks like a
+  // wallet problem even though the signature never left the page.
   const allowedRpcMethods = new Set([
     'eth_chainId', 'eth_blockNumber', 'eth_getBalance', 'eth_call', 'eth_estimateGas',
     'eth_sendRawTransaction', 'eth_getTransactionCount', 'eth_gasPrice', 'eth_maxPriorityFeePerGas',
     'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getLogs', 'eth_getCode',
-    'eth_feeHistory', 'web3_clientVersion', 'net_version',
+    'eth_feeHistory', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'web3_clientVersion', 'net_version',
   ]);
   const forwardRpc = createMonadRpcForwarder();
   let generatedRpcId = 0;

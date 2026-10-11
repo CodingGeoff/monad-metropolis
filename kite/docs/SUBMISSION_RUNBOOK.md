@@ -1,8 +1,12 @@
 # Kite — Metropolis 提交冲刺手册（最后 48 小时）
 
-> **本轮更新时间：** 2026-10-11 08:25 UTC（= 北京/上海 16:25，东京 17:25）；历史线上检查时间为 07:35 UTC。
+> **本轮更新时间：** 2026-10-11 08:55 UTC（= 北京/上海 16:55，东京 17:55）；历史线上检查时间为 07:35 UTC。
 > **官方提交截止：** 2026-10-13（官方页面未公布精确时分；以登录 [portal](https://hackathon.monad.xyz/) 后的倒计时为准）。
-> **重要更新：** 用户报告当前 Render 版本的 `/api/rpc` 在 `eth_chainId` 上返回 `Invalid JSON-RPC request`。本分支已修代码并通过本地桩测试/构建；尚未部署，也尚未对生产 RPC 做修复后的真实验证。历史线上检查不能证明 RPC 当前可用。下文严格区分“源码测试通过”和“生产已验证”。
+> **重要更新（两个已报告的线上错误，同一个部署动作即可一起解除）：**
+> 1. 用户报告当前 Render 版本的 `/api/rpc` 在 `eth_chainId` 上返回 `Invalid JSON-RPC request`。根因是服务端把 JSON-RPC 可省略的 `params` 当成必填数组。
+> 2. 用户点应用内 **Test AUSD** 报 `The method "eth_getBlockByNumber" does not exist / is not available.`（`-32601`）。根因是 `/api/rpc` 的 method allowlist 漏掉了 viem 写交易路径（`writeContract` → `sendTransaction` → `prepareTransactionRequest` 读最新区块推断 type、估算 EIP-1559 费用）必须的区块读取方法；签名根本没发出，但报错看起来像钱包故障。
+>
+> 两项都已在源码修复并通过本地桩测试/构建（见第 5 节），但都**尚未部署**，也尚未对生产 RPC 做修复后的真实验证。历史线上检查不能证明 RPC 当前可用。下文严格区分“源码测试通过”和“生产已验证”。
 
 ---
 
@@ -11,7 +15,8 @@
 **还不能直接录制正式付款视频。** 目前至少有两个阻塞，必须按顺序解除：
 
 1. **生产 RPC：** 用户报告当前 Render build 的 `/api/rpc` 对 `eth_chainId` 报 `Invalid JSON-RPC request`。根因是服务端把 JSON-RPC 可省略的 `params` 错当成必填数组。本分支已修复，并添加多节点、链 ID 校验的服务端 fallback；但 Render 自动部署绑定 `main`，所以必须先把改动部署到线上，再按第 2 节 smoke test。**源码通过不等于线上已修好。**
-2. **AUSD 余额：** 上次线上地址检查记录演示钱包 `0xba7cd500C6CbE528eEBA123583de0B09B8f109dB` 有 10 MON、AUSD 为 0。RPC 确认正常后，再在真机上点一次应用内 **Test AUSD**（Agora 测试网水龙头每次固定发 **10,000 AUSD**，此前观测手续费约 0.013 MON）。
+2. **写交易路径（点 Test AUSD 报错）：** 用户点 **Test AUSD** 时得到 `The method "eth_getBlockByNumber" does not exist / is not available.`（`-32601`）。`/api/rpc` 的 allowlist 只放行了读方法，没有放行 viem 写交易前必须的 `eth_getBlockByNumber`（`prepareTransactionRequest` 用它判断交易类型并估算 EIP-1559 费用），所以 faucet 领取、Send AUSD、发票付款都会在签名前失败。本分支已把 `eth_getBlockByNumber` / `eth_getBlockByHash` 加入 allowlist，并用真实 viem 写路径的回归测试锁住；同样需要部署后用第 2.1 节的第二个 curl 与应用内按钮验证。
+3. **AUSD 余额：** 上次线上地址检查记录演示钱包 `0xba7cd500C6CbE528eEBA123583de0B09B8f109dB` 有 10 MON、AUSD 为 0。RPC 确认正常后，再在真机上点一次应用内 **Test AUSD**（Agora 测试网水龙头每次固定发 **10,000 AUSD**，此前观测手续费约 0.013 MON）。
 
 先验证 RPC，再领 AUSD、跑一笔小额真实转账、确认 explorer receipt，最后录制。不要在 RPC 仍报错时连续重复点 faucet 或付款；如果已签名/广播，先按哈希和 MonadScan 对账。
 
@@ -32,7 +37,7 @@
 | 8 | **EIP-712 发票链接在生产验签通过** | ✅ | 用仓库自带 `signPaymentRequest()` 真签一张 12.5 AUSD 发票（payee `0x5Fb31764b09F9717613DdC746867E633bcbB988b`，`detailsHash 0xdd7fb1c5…`），线上打开后页面显示 **Verified**、金额 `12.5 AUSD`、收款方 `0x5Fb317…bB988b`、到期 `10/18/2026` |
 | 9 | 演示钱包有 gas | ✅ | MonadScan 地址页显示 **10 MON**，来源 `0x631a6A93…05F16d08e` 两笔各 5 MON |
 | 10 | Agora 水龙头可用且金额已知 | ✅ | 水龙头合约 `0xd236c18D…65a73ee6C` 共 649 笔交易，最近一笔 8 分钟前成功；tx `0xc4ce2d3f…e516` 显示 `requestFunds` 转出 **10,000 AUSD**，手续费 0.0133212 MON，状态 Success |
-| 11 | 自动化测试 | ✅ 本地 | 修复后 `npm test` → **7 个文件 / 52 项通过**（`server-api` 21、`payment-schedule` 13、`api` 4、`invoices` 4、`contact-crypto` 4、`account-derivation` 2、`ai-schema` 4）；上游用桩，不是生产链路证据 |
+| 11 | 自动化测试 | ✅ 本地 | allowlist 修复后 `npm test` → **7 个文件 / 53 项通过**（`server-api` 22、`payment-schedule` 13、`api` 4、`invoices` 4、`contact-crypto` 4、`account-derivation` 2、`ai-schema` 4；本轮在 Node `v22.22.3` 沙箱运行，此前 52 项为 Node `24.21.0` 下的记录）；上游用桩，不是生产链路证据 |
 | 12 | 生产构建 | ✅ 本地 / ⏳ 线上 | 修复后通过 Node `24.21.0` 执行 `npm run build`（`tsc --noEmit` + Vite）；Render 部署/生产 smoke test 仍未验证 |
 | 13 | 依赖安全 | ✅ | 根包与 `indexer/` 的 `npm audit` 均为 **0 vulnerabilities** |
 | 14 | 官方截止时间 | ✅ | Monad 官方博客与第三方赛事页均记为 **10 月 13 日提交 / 10-14–27 评审 / 11-3 公布** |
@@ -71,6 +76,19 @@ curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
 - 若仍返回 `400` + `Invalid JSON-RPC request`：线上仍是旧 build，或发布没完成；先确认部署 commit/等待完成，不要反复点 faucet。
 - 若返回 `502` + `All Monad testnet RPC providers...`：应用已尝试候选节点仍未取得有效响应；看 Render 服务状态/日志，确认 Alchemy key 和 `MONAD_RPC_URL` / `MONAD_RPC_FALLBACK_URLS` 配置。链 ID 不为 10143 的节点会被拒绝，不会拿来读写。
 - 若返回 `200` 但不是 `0x279f`：停止，不要签名或广播；这是错误网络响应。
+
+再验证写交易路径需要的区块读取（**用户报 Test AUSD 报错的直接回归项**）：
+
+```bash
+curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
+  -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"eth_getBlockByNumber","params":["latest",false]}'
+```
+
+成功条件：HTTP `200`，JSON 有 `result.number` / `result.hash`（区块字段内容不重要）。若返回 `403` + `{"code":-32601,"message":"RPC method not enabled."}`，说明线上还是缺方法的旧 allowlist：部署本分支后用应用内 **Test AUSD** 复核一次。`params` 固定用 `["latest", false]`，与 viem 的实际调用一致。
+
+- 顺手确认钱包级方法仍被拒绝（这是 allowlist 仍然生效、不是被放宽的证据）：
+  `--data '{"jsonrpc":"2.0","id":3,"method":"eth_accounts","params":[]}'` → 期望 `403` + `-32601`。
 
 ### 2.2 登录、领水龙头 AUSD
 
@@ -162,6 +180,7 @@ viem 2.57.4 调用无参数的 `eth_chainId` 时，`params` 在 JSON-RPC 请求�
 
 ### 本分支的代码修复与分层恢复
 
+- **method allowlist 补上写交易路径的区块读取（`server/app.ts`）：** `eth_getBlockByNumber`（以及 `getBlock({ blockHash })` 会用到的 `eth_getBlockByHash`）加入 allowlist。viem 2.57.4 的写路径是 `writeContract` → `sendTransaction` → `prepareTransactionRequest`，其中会先 `getBlock({ blockTag: 'latest' })` 判断交易类型并估算 EIP-1559 费用（`baseFeePerGas` × 1.2 + `eth_maxPriorityFeePerGas`），缺这个方法就会在**签名前**被代理回 `-32601`，浏览器侧显示成 viem 的 `MethodNotFoundRpcError: The method "eth_getBlockByNumber" does not exist / is not available.`，附带 `Request body: {"method":"eth_getBlockByNumber","params":["latest",false]}`。这解释了为什么点 **Test AUSD**（faucet `requestFunds`）会失败；同一条路径也让 Send AUSD / 发票付款失败。allowlist 仍拒绝 `eth_accounts`、`eth_signTransaction`、`personal_*`、`wallet_*`、`debug_*` 等钱包级/节点管理方法。
 - 代理现在接受标准的省略 `params`，并规范化为 `params: []`；仍校验 JSON-RPC 版本、method allowlist、参数形态与 raw transaction 长度/格式，不放开任意 RPC 方法。
 - RPC 仍只从浏览器请求同源 `/api/rpc`，不把 Alchemy key 暴露到前端，也不依赖浏览器跨域直连。
 - 服务端节点顺序：Alchemy（如配置）→ `MONAD_RPC_URL` → `MONAD_RPC_FALLBACK_URLS` 中最多 3 个 operator 配置节点 → 内置 Monad 官方公共测试网 RPC。HTTPS-only（生产）、URL 去重、最多 6 个候选。
@@ -173,7 +192,9 @@ viem 2.57.4 调用无参数的 `eth_chainId` 时，`params` 在 JSON-RPC 请求�
 
 本轮在 Node `24.21.0` 下 `npm run typecheck`、`npm test`（7 文件 / 52 项）和 `npm run build` 全通过；RPC 测试覆盖 viem 调用、缺省 `params`、多节点故障 fallback、错误 chain ID 与 EVM revert。上游是桩；这些结果不等于生产 RPC / passkey / 链上付款验证。
 
-`render.yaml` 绑定 `branch: main`，此 Arena 工作分支的代码**不会因此自动上线**。合并/部署后，先照第 2.1 节用无 `params` 的 curl 检查 `0x279f` 与响应头；然后用真机 passkey 看余额、领 AUSD，最后做一笔小额的 payer→payee 真转账并核对 explorer。直到这些线上步骤成功，才把问题标为已修好；不要把本地测试当作 Agora 交易或 Alchemy bounty 的证明。
+allowlist 修复的本地复核（2026-10-11 08:55 UTC，Arena 沙箱 Node `v22.22.3`；仓库声明 Node `>=24 <25`，因此 `npm ci` 需 `--engine-strict=false`）：`npm run typecheck`、`npm test`（7 文件 / **53 项**）与 `npm run build` 全通过。新增回归测试 `tests/server-api.test.ts` 用**真实 viem** `createWalletClient(...).writeContract()` 走同源 `/api/rpc` 完成 faucet `requestFunds` 与 AUSD `transfer`，断言 `eth_getBlockByNumber` 确实上行、`eth_sendRawTransaction` 收到发往 faucet 合约的签名 raw bytes；把 `eth_getBlockByNumber` 从 allowlist 移走时该测试会失败（已实测）。另用一次性脚本复现过用户报错原文，修复后同一脚本返回交易哈希。桩上游意味着这仍不是生产或赞助商调用证据。
+
+`render.yaml` 绑定 `branch: main`，此 Arena 工作分支的代码**不会因此自动上线**。合并/部署后，先照第 2.1 节用无 `params` 的 curl 检查 `0x279f` 与响应头，再检查 `eth_getBlockByNumber` 不再返回 `-32601`、`eth_accounts` 仍被拒绝；然后用真机 passkey 看余额、点 **Test AUSD** 领 AUSD，最后做一笔小额的 payer→payee 真转账并核对 explorer。直到这些线上步骤成功，才把问题标为已修好；不要把本地测试当作 Agora 交易或 Alchemy bounty 的证明。
 
 ---
 
@@ -186,7 +207,8 @@ viem 2.57.4 调用无参数的 `eth_chainId` 时，`params` 在 JSON-RPC 请求�
 | passkey 能建但付款失败 / 报 PRF 不支持 | 普通 WebAuthn passkey ≠ 支持 PRF。换 Mera 兼容表里的 authenticator；确认是 HTTPS 且 RP ID 就是 `kite-monad-payments.onrender.com`。**不要临时换域名。** |
 | `Invalid JSON-RPC request`，body 显示 `{"method":"eth_chainId"}` | 这是旧 build 的代理把可选 `params` 当必填导致的。先部署本分支修复，再用第 2.1 节 curl（故意不传 params）验证。不是 AUSD 金额/faucet 问题；`/api/health` 返回 ok 也不能证明 RPC 可用。 |
 | 余额读不出来 / `/api/rpc` 返回 502 | 查看 Network 的 `x-kite-rpc-attempts`；修复版会尝试配置节点并校验 chain ID。确认 Render 外连、Alchemy key/网络、`MONAD_RPC_URL` 和 `MONAD_RPC_FALLBACK_URLS`。若只是读操作可稍后刷新；若发生在签名广播后，先查同一笔链上状态，勿盲目重签。 |
-| 点 Test AUSD 报错 | 看是不是 gas 不够（不会，有 10 MON）；或水龙头限流。等几分钟再试，**不要重复点**——应用会把 pending 哈希存住，再点是查同一笔。 |
+| 点 Test AUSD 报 `The method "eth_getBlockByNumber" does not exist / is not available.`（`-32601`） | 线上代理的 allowlist 缺 viem 写路径要用的区块读取方法；签名还没发出，链上不会有交易。部署含 `eth_getBlockByNumber` 的修复版，用第 2.1 节第二个 curl 确认不再返回 `-32601`，再点一次按钮。**不要**因为这条报错去重领 MON 或怀疑 passkey。 |
+| 点 Test AUSD 报错（其他） | 看是不是 gas 不够（不会，有 10 MON）；或水龙头限流（`already requested`）。等几分钟再试，**不要重复点**——应用会把 pending 哈希存住，再点是查同一笔。 |
 | 付款一直 pending | 应用有 30 秒等待上限，超时会提示"仍在 pending，不要重复提交"。直接去 MonadScan 查那笔哈希，别在 UI 上重试。 |
 | 第二个账户登录回到第一个 | 同一 profile 只存一个 credential 提示。用另一个浏览器 profile 或另一台设备。 |
 | Envio 显示接了但 Activity 没数据 | `envio: false` 说明 `ENVIO_GRAPHQL_URL` 没设。没设就别说用了 Envio。 |

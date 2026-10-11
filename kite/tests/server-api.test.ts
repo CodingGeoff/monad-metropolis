@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { createPublicClient, defineChain, http } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { AUSD_FAUCET_TESTNET, AUSD_TESTNET, ausdFaucetAbi, erc20Abi, monadTestnet } from '../src/lib/config';
 import { createApp } from '../server/app';
 
 // Upstream providers (RPC, Envio, Kimi/Qwen/Hunyuan) are stubbed; only the local test server is real.
@@ -117,6 +119,54 @@ describe('JSON-RPC proxy', () => {
     const client = createPublicClient({ chain, transport: http(`${base}/api/rpc`, { retryCount: 0 }) });
     expect(await client.getChainId()).toBe(10143);
     expect(upstreamCalls).toHaveLength(1);
+  });
+
+  it('carries the real viem 2.57.4 signed write path — the "Test AUSD" faucet claim and a "Send AUSD" transfer — through the allowlist', async () => {
+    // Production failure this guards: viem's prepareTransactionRequest reads the
+    // latest block to infer the transaction type and to estimate EIP-1559 fees, so
+    // an allowlist without eth_getBlockByNumber answers -32601 and the browser
+    // surfaces `The method "eth_getBlockByNumber" does not exist / is not available.`
+    // even though nothing was signed or broadcast. `eth_maxPriorityFeePerGas` covers
+    // the branch viem actually takes when the provider supports it.
+    const methods: string[] = [];
+    upstreamHandler = (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string };
+      methods.push(request.method);
+      const result = (() => {
+        switch (request.method) {
+          case 'eth_chainId': return '0x279f';
+          case 'eth_getBlockByNumber': return {
+            number: '0x64', hash: `0x${'11'.repeat(32)}`, parentHash: `0x${'22'.repeat(32)}`,
+            nonce: '0x0000000000000000', sha3Uncles: `0x${'33'.repeat(32)}`, logsBloom: `0x${'00'.repeat(256)}`,
+            transactionsRoot: `0x${'44'.repeat(32)}`, stateRoot: `0x${'55'.repeat(32)}`, receiptsRoot: `0x${'66'.repeat(32)}`,
+            miner: '0x0000000000000000000000000000000000000000', difficulty: '0x0', totalDifficulty: '0x0',
+            extraData: '0x', size: '0x1', gasLimit: '0x1c9c380', gasUsed: '0x0', timestamp: '0x64',
+            baseFeePerGas: '0x3b9aca00', transactions: [], uncles: [],
+          };
+          case 'eth_maxPriorityFeePerGas': return '0x3b9aca00';
+          case 'eth_getTransactionCount': return '0x0';
+          case 'eth_estimateGas': return '0x9c40';
+          case 'eth_sendRawTransaction': return `0x${'ab'.repeat(32)}`;
+          default: return '0x0';
+        }
+      })();
+      return json({ jsonrpc: '2.0', id: request.id, result });
+    };
+
+    const account = privateKeyToAccount(`0x${'11'.repeat(32)}`);
+    const wallet = createWalletClient({ account, chain: monadTestnet, transport: http(`${base}/api/rpc`, { retryCount: 0 }) });
+    const faucetHash = await wallet.writeContract({ address: AUSD_FAUCET_TESTNET, abi: ausdFaucetAbi, functionName: 'requestFunds', args: [account.address] });
+    const transferHash = await wallet.writeContract({ address: AUSD_TESTNET, abi: erc20Abi, functionName: 'transfer', args: [account.address, 1_000_000n] });
+
+    expect(faucetHash).toBe(`0x${'ab'.repeat(32)}`);
+    expect(transferHash).toBe(`0x${'ab'.repeat(32)}`);
+    expect(methods).toContain('eth_getBlockByNumber');
+    const broadcasts = upstreamCalls.filter((call) => JSON.parse(String(call.init?.body)).method === 'eth_sendRawTransaction');
+    expect(broadcasts).toHaveLength(2);
+    const rawFaucetCall = JSON.parse(String(broadcasts[0].init?.body)).params[0] as string;
+    expect(rawFaucetCall).toMatch(/^0x(?:[0-9a-f]{2})+$/);
+    // Signed bytes really target the Agora faucet contract, so the forwarded payload is the app's own call.
+    expect(rawFaucetCall).toContain(AUSD_FAUCET_TESTNET.slice(2).toLowerCase());
   });
 
   it('fails over from unavailable Alchemy through a configured backup to the public testnet RPC', async () => {

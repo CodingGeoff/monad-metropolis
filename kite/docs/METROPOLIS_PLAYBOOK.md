@@ -35,9 +35,9 @@
 
 - **仓库已公开：** `github.com/CodingGeoff/monad-metropolis`，GitHub API 返回 `"private": false`。
 - **应用已上线：** <https://kite-monad-payments.onrender.com/> 由 `kite/render.yaml`（Node `24.21.0`、新加坡、`rootDir: kite`、`/api/health`、`main` 分支自动部署）部署，SPA 与同域 Express API 都在跑。
-- **Alchemy 已配置：** 线上旧 `/api/health` 返回 `rpcProvider: "alchemy"`（仅表示 key 有配置，不探测 RPC）。用户报告当前 deployed `/api/rpc` 的 `eth_chainId` 返回 Invalid JSON-RPC request；本 Arena 分支已修复可选 `params` 并加多节点 fallback，尚未部署/线上验证。
+- **Alchemy 已配置：** 线上旧 `/api/health` 返回 `rpcProvider: "alchemy"`（仅表示 key 有配置，不探测 RPC）。用户报告当前 deployed build 的两个 `/api/rpc` 错误：`eth_chainId` 返回 Invalid JSON-RPC request（可选 `params` 被当成必填），以及点 **Test AUSD** 返回 `The method "eth_getBlockByNumber" does not exist / is not available.`（allowlist 缺 viem 写交易路径的区块读取）。本 Arena 分支已修复这两处并加多节点 fallback，尚未部署/线上验证。
 - **生产环境的发票链路已实测通过：** 用仓库自带 `signPaymentRequest()` 真签一张 12.5 AUSD 的 EIP-712 发票，线上 `/pay?r=…` 打开后显示 **Verified**，金额、收款方、到期日均正确。
-- **质量检查（2026-10-11，Node `24.21.0`）：** RPC 修复后 `npm test` → **7 个文件 / 52 项测试全部通过**；`npm run build`（`tsc --noEmit` + `vite build`）通过。根包与 `indexer/` 的 `npm audit` 先前核对均为 0 vulnerabilities；本地桩测试/构建不证明生产 RPC、真机 passkey 或链上支付成功。
+- **质量检查：** RPC `params` 修复后（2026-10-11，Node `24.21.0`）`npm test` → **7 个文件 / 52 项测试全部通过**。allowlist 修复后（同日 08:55 UTC，Arena 沙箱 Node `v22.22.3`，`npm ci` 需 `--engine-strict=false`）`npm run typecheck`、`npm test` → **7 个文件 / 53 项**、`npm run build` 全部通过；新增回归测试用真实 viem `writeContract` 走 faucet `requestFunds` 与 AUSD `transfer`，断言 `eth_getBlockByNumber` 上行、`eth_sendRawTransaction` 收到发往 faucet 合约的签名 raw bytes，移走该方法即失败。根包与 `indexer/` 的 `npm audit` 先前核对均为 0 vulnerabilities；本地桩测试/构建不证明生产 RPC、真机 passkey 或链上支付成功。
 - **Agora 水龙头已核实可用：** 合约 `0xd236c18D…65a73ee6C` 共 649 笔交易，`requestFunds` 每次固定转出 **10,000 AUSD**（实测 tx `0xc4ce2d3f…e516`，手续费 0.0133212 MON，Success）。
 - 产品核心方向是：商家创建一张 AUSD 付款请求，付款人检查收款方、金额、币种和期限后，用 Mera passkey 签名并在 Monad Testnet 转账。通讯录使用独立派生密钥在用户浏览器加密。
 
@@ -109,9 +109,9 @@ Monad 官方 Metropolis 页面列出：
 | AUSD | Monad Testnet 上 AUSD 读写和支付流程代码 | 代码已按 Testnet 配置；尚无本轮真实用户付款哈希 |
 | 隐私通讯录 | Mera PRF 派生后经 HKDF 域分离，再用 AES-GCM 加密地址簿 | 有代码和加密/篡改相关测试；尚无用户重载/跨设备演示证据 |
 | Envio | `indexer/config.yaml`、schema、Transfer handler、测试 | codegen/类型检查/本地 handler 测试通过；尚未在 Envio Cloud 同步，也未被线上 app 调用 |
-| Alchemy | 服务器端 RPC proxy | 线上历史 health 显示 `rpcProvider: alchemy`（配置提示）；用户报告 `eth_chainId` 请求失败。本 Arena 分支已修复并加入 Alchemy → configured backup → public RPC failover，待部署与实测 |
+| Alchemy | 服务器端 RPC proxy | 线上历史 health 显示 `rpcProvider: alchemy`（配置提示）；用户报告 `eth_chainId` 与 **Test AUSD**（`eth_getBlockByNumber`）两处失败。本 Arena 分支已修复并加入 Alchemy → configured backup → public RPC failover，待部署与实测 |
 | Kimi/Qwen | 服务器端可选文案/翻译 API | 输入校验和 fallback 代码存在；当前没有真实 provider key/成功请求 |
-| 质量检查 | 根项目 **52 项测试**、indexer 另有 handler test | RPC 修复后本轮在 Node `24.21.0` 下 `npm run typecheck`、`npm test`（52/52）和 `npm run build` 通过；上游仍是桩，生产部署/链上实测未验证 |
+| 质量检查 | 根项目 **53 项测试**、indexer 另有 handler test | RPC 修复后在 Node `24.21.0` 下 52/52 通过；allowlist 修复后在 Node `v22.22.3` 下 53/53、typecheck 与生产构建通过；上游仍是桩，生产部署/链上实测未验证 |
 
 ### 尚未完成事项的原因：区分代码缺失、未实测与需要用户授权
 
@@ -119,7 +119,7 @@ Monad 官方 Metropolis 页面列出：
 
 | 事项 | 当前状态 | 为什么现在没实现/没法确认 | 关闭事项的下一步 |
 |---|---|---|---|
-| Render HTTPS 部署 | 已部署到 <https://kite-monad-payments.onrender.com/>；SPA 与同源 Express API 存在 | Render Blueprint 指向 `main`；本 Arena 分支的 JSON-RPC hotfix 尚未上线。`/api/health` 是配置概览，用户报告线上 `eth_chainId` 当前失败。 | 将 hotfix 通过正常发布流程部署后，按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 做不带 `params` 的 smoke test，期望 `0x279f`；再做真人 passkey/付款验证。 |
+| Render HTTPS 部署 | 已部署到 <https://kite-monad-payments.onrender.com/>；SPA 与同源 Express API 存在 | Render Blueprint 指向 `main`；本 Arena 分支的两项 RPC hotfix（可选 `params`、写交易路径 `eth_getBlockByNumber`）尚未上线。`/api/health` 是配置概览，用户报告线上 `eth_chainId` 与 **Test AUSD** 当前失败。 | 将 hotfix 通过正常发布流程部署后，按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 跑两个 smoke test：不带 `params` 的 `eth_chainId` 期望 `0x279f`，`eth_getBlockByNumber` 期望 200 而非 `-32601`；再用应用内 **Test AUSD** 与真人 passkey 验证付款。 |
 | Netlify 部署 | 尚未为 Netlify 改造 | 当前 Express 启动文件直接 `app.listen()`；Netlify 官方 Express 方案使用 Functions，需要 handler wrapper、`/api/*` rewrite，并调整启动/路由方式。只发 Vite `dist/` 会让 `/api/*` 缺失。为缩短交付路径，先选不需改架构的 Render，而不是并行维护两套。 | 若确定选择 Netlify，再单独把 API 改为 Netlify Function 或拆成独立后端，并跑完整接口测试。 |
 | 最终 hostname / 自有域名 | 已有稳定的 `kite-monad-payments.onrender.com` 域名；仍无真人 PRF 验证 | Render 域名正在部署使用，`VITE_MERA_RP_ID` 应与之固定一致；不能随意换 host，否则既有 credential 会不匹配。 | 保持现有 HTTPS host，不换域名；在真实支持 PRF 的设备上完成创建/恢复/签名验证，见第 2、9 节。 |
 | 手机打开与 PWA 安装 | manifest、service worker、响应式布局代码已存在；未在真实 iPhone/Android 上实测 | 沙箱不能证明真实设备的安全上下文、安装流程、屏幕适配或 WebAuthn 行为。当前是可安装的 PWA，不是原生 iOS/Android app；service worker 只缓存 app shell/assets，付款 API 仍需联网。Agora bounty 是否把 PWA 算作 mobile app 未确认。 | 部署后在真实 Safari/Chrome 打开、安装并完成支付路径测试；向 organizer 确认 PWA 资格，不确认就不声称满足 native/mobile bounty。 |
@@ -137,7 +137,7 @@ Monad 官方 Metropolis 页面列出：
 ### 当前必须补齐的外部/人工事项
 
 - 官方 portal 参赛注册与最终提交；
-- 将本分支的 RPC hotfix 通过正常发布流程部署到 Render（Blueprint 当前跟踪 `main`），然后按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 验证 `eth_chainId` 返回 `0x279f`；
+- 将本分支的两项 RPC hotfix（可选 `params`、写交易路径 `eth_getBlockByNumber`）通过正常发布流程部署到 Render（Blueprint 当前跟踪 `main`），然后按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 验证 `eth_chainId` 返回 `0x279f`、`eth_getBlockByNumber` 不再返回 `-32601`；
 - 两个真人 Testnet passkey 账户、MON gas、AUSD test funds 与 payer→payee 真实交易；
 - Alchemy dashboard usage 证明（只有 smoke test 实际走 Alchemy 才能记为 Alchemy 调用）；
 - Envio Cloud/GitHub App、Kimi/Qwen 事件账户与真实 API 调用（仅在确实申报这些 bounty 时）；
@@ -301,7 +301,7 @@ README 中应保留真实、简短的 AI-assisted development disclosure；按�
 
 **当前 Render 发布状态与后续步骤：**
 
-现有服务已在 <https://kite-monad-payments.onrender.com/> 部署；仓库的 `render.yaml` / Blueprint 跟踪 `main`。本 Arena 工作分支的 RPC 修复**尚未部署**。按正常 PR/release 流程合入并让 Render 完成部署后，先执行 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 的无 `params` `eth_chainId` smoke test：必须得到 HTTP 200、`result: "0x279f"`，并检查 `x-kite-rpc-provider` 与 `x-kite-rpc-fallback-used`。不要仅凭 `/api/health` 或首页能打开就宣布链路修复。
+现有服务已在 <https://kite-monad-payments.onrender.com/> 部署；仓库的 `render.yaml` / Blueprint 跟踪 `main`。本 Arena 工作分支的两项 RPC 修复（可选 `params`、写交易路径的 `eth_getBlockByNumber`）**尚未部署**。按正常 PR/release 流程合入并让 Render 完成部署后，先执行 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) §2.1 的两个 curl：无 `params` 的 `eth_chainId` 必须得到 HTTP 200、`result: "0x279f"`（并检查 `x-kite-rpc-provider` 与 `x-kite-rpc-fallback-used`），`eth_getBlockByNumber` 必须不再返回 `-32601`，再用应用内 **Test AUSD** 复核。不要仅凭 `/api/health` 或首页能打开就宣布链路修复。
 
 如需为新环境重新创建 Render service（不是当前 hotfix 的首选路径）：使用现有公开仓库及 `kite/render.yaml`，不要重新初始化 repo；选择 Blueprint 后审核 plan/账单，再应用。蓝图固定 Singapore 区域、demo plan、Node `24.21.0`；build 为 `npm ci --include=dev && npm run build`，start 为 `npm start`，health check 为 `/api/health`。完成后检查服务日志、首页、health，并按上面的 RPC smoke test 实测上游。只在 service 的 **Environment** 放 server-side secrets（例如 `ALCHEMY_API_KEY`、`ENVIO_GRAPHQL_URL`、`KIMI_API_KEY`、`QWEN_API_KEY`）；绝不把密钥放进 `VITE_*`、`render.yaml`、GitHub 或聊天中。
 
@@ -351,7 +351,7 @@ QWEN_MODEL=qwen3.8-max
 1. 打开 `https://<你的域名>/`：确认首页完整、移动宽度可用、没有浏览器 console 致命错误；
 2. 打开 `https://<你的域名>/api/health`：应返回 `status: ok`，且没有 404/500；`chainId: 10143` 是应用配置值，不是上游探测结果；
 3. 确认 health 响应**不回显 API key**；
-4. `rpcProvider` / `rpcFallbacks` 只代表配置概览；另用 `SUBMISSION_RUNBOOK.md` 第 2.1 节的无 `params` curl 验证实际 `eth_chainId`，应返回 `0x279f`，看响应头确认本次 provider/fallback；
+4. `rpcProvider` / `rpcFallbacks` 只代表配置概览；另用 `SUBMISSION_RUNBOOK.md` 第 2.1 节的两个 curl 验证实际 `eth_chainId`（应返回 `0x279f`，看响应头确认本次 provider/fallback）与 `eth_getBlockByNumber`（写交易路径所需，应返回 200）；
 5. Envio 和 AI flags 变为 true 只说明配置存在，仍需完成第 10 节里的真实请求证明；
 6. 在手机 Safari/Chrome 实测 HTTPS、安装提示、窗口刷新、deeplink/payment link 打开；
 7. 若 app/server 报错，先查看部署日志与当前 `.env.example` 名称，不要把 API key 贴给别人调试。
@@ -471,7 +471,7 @@ Monad Testnet explorer：[testnet.monadscan.com](https://testnet.monadscan.com)�
 1. 在 [Alchemy dashboard](https://dashboard.alchemy.com/signup) 创建 account/app；选择 Monad Testnet，复制 API key；
 2. 对照 [Alchemy Monad quickstart](https://www.alchemy.com/docs/reference/monad-api-quickstart)，官方 RPC 形式为 `https://monad-testnet.g.alchemy.com/v2/<API_KEY>`；
 3. 把 key 只设在 Kite 部署平台的 server-side `ALCHEMY_API_KEY`；重新部署；
-4. health 显示 `rpcProvider: alchemy` 只证明 key 有配置；先运行 `SUBMISSION_RUNBOOK.md` 第 2.1 节的 `eth_chainId` smoke test，并从非秘密响应头确认实际 provider；
+4. health 显示 `rpcProvider: alchemy` 只证明 key 有配置；先运行 `SUBMISSION_RUNBOOK.md` 第 2.1 节的两个 smoke test（`eth_chainId` 与写路径的 `eth_getBlockByNumber`），并从非秘密响应头确认实际 provider；
 5. 用 Kite 完成至少一次区块/余额读取及一次由用户 passkey 签署的测试交易；
 6. 在 Alchemy dashboard 检查确有该 app 的 Monad 请求/usage；保存经遮盖 key 的截图或记录；
 7. demo 展示 Kite 的实际产品流程如何依赖 Alchemy RPC，而不只展示后台配置。
@@ -623,7 +623,7 @@ evidence/
 
 ### 10 月 11 日：线上 demo 与主流程（当前待办）
 
-- 现有 Render 部署仍有 `eth_chainId` 用户报告；先把本分支 hotfix 正常发布到 main/Render，再运行无 `params` RPC smoke test；
+- 现有 Render 部署仍有 `eth_chainId` 与 **Test AUSD**（`eth_getBlockByNumber`）两处用户报告；先把本分支 hotfix 正常发布到 main/Render，再运行 §2.1 的两个 RPC smoke test；
 - 保持 `kite-monad-payments.onrender.com` 为固定 HTTPS/RP ID，不临时换域名；真机 passkey/PRF 仍待本人验证；
 - RPC 验证成功后确认 MON/AUSD 余额，必要时领 faucet；用两个独立 passkey 账户做真实 payer→payee 付款；
 - 核实 MonadScan receipt、保存 tx hash 后再录视频。

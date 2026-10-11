@@ -3,7 +3,7 @@
 > The shot-by-shot version with timings, pre-recording checklist and failure handling lives in
 > [`SUBMISSION_RUNBOOK.md`](SUBMISSION_RUNBOOK.md) §3. This file is the narration skeleton.
 >
-> **Rule:** never narrate an integration that is not live. The last health check reported `envio: false` and all AI providers `false`; `rpcProvider: alchemy` is only a configuration signal. A live `eth_chainId` proxy error has since been reported, and the source fix is pending deployment/production retest. Do not narrate a healthy RPC/Alchemy path until the no-params smoke test succeeds; cut Envio and Kimi/Qwen until configured and exercised.
+> **Rule:** never narrate an integration that is not live. The last health check reported `envio: false` and all AI providers `false`; `rpcProvider: alchemy` is only a configuration signal. Live `eth_chainId` and `eth_getBlockByNumber` (`-32601`) proxy errors have since been reported, and both source fixes are pending deployment/production retest. Do not narrate a healthy RPC/Alchemy path until the no-params smoke test and the write-path probe succeed and the in-app **Test AUSD** button works; cut Envio and Kimi/Qwen until configured and exercised.
 
 ## 0:00–0:20 — Problem and user
 "A solo designer can finish work for a client in another country and still wait days for a bank
