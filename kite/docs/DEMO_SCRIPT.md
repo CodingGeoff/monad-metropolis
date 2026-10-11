@@ -3,9 +3,7 @@
 > The shot-by-shot version with timings, pre-recording checklist and failure handling lives in
 > [`SUBMISSION_RUNBOOK.md`](SUBMISSION_RUNBOOK.md) §3. This file is the narration skeleton.
 >
-> **Rule:** never narrate an integration that is not live. At the time of writing the deployed
-> service reports `envio: false` and all AI providers `false`; `rpcProvider` is `alchemy`. Cut the
-> Envio and Kimi/Qwen beats until those are actually configured and exercised.
+> **Rule:** never narrate an integration that is not live. The last health check reported `envio: false` and all AI providers `false`; `rpcProvider: alchemy` is only a configuration signal. A live `eth_chainId` proxy error has since been reported, and the source fix is pending deployment/production retest. Do not narrate a healthy RPC/Alchemy path until the no-params smoke test succeeds; cut Envio and Kimi/Qwen until configured and exercised.
 
 ## 0:00–0:20 — Problem and user
 "A solo designer can finish work for a client in another country and still wait days for a bank
@@ -18,9 +16,7 @@ derived client-side from PRF output. No extension, no recovery phrase, no custod
 "passkey with PRF" explicitly — a plain WebAuthn credential is not the same thing.
 
 ## 0:50–1:05 — Where the chain access goes
-Show `/api/health`. Every browser read and every signed broadcast goes through the same-origin
-`/api/rpc` proxy, backed by Alchemy's Monad testnet endpoint. Health reports the provider name and
-never echoes the key.
+Show Settings plus the successful `/api/rpc` smoke-test response. Every browser read and signed broadcast goes through the same-origin proxy: Alchemy is preferred, then chain-ID-checked configured/public Monad testnet backups. `/api/health` reports configuration only; use the response headers to show the node used for the smoke test, never any key.
 
 ## 1:05–1:35 — Make an invoice
 Type a short brief and an amount. Sign it. Explain that Kite signs invoice terms with EIP-712, and

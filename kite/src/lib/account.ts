@@ -139,7 +139,9 @@ export function createKiteWalletClient(kiteAccount: KiteAccount) {
   return createWalletClient({
     account: kiteAccount.account,
     chain: monadTestnet,
-    transport: http(`${window.location.origin}/api/rpc`),
+    // The server retries across testnet endpoints; keep viem from resending an
+    // ambiguous write while still allowing the proxy's same-byte broadcast fallback.
+    transport: http(`${window.location.origin}/api/rpc`, { timeout: 45_000, retryCount: 0 }),
   });
 }
 

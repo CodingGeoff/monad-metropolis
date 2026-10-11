@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import path from 'node:path';
 import { isAddress } from 'viem';
 import { aiProviderStatus, aiRequestSchema, runAI } from './ai.js';
+import { createMonadRpcForwarder, getRpcProviderStatus, normalizeRpcRequest } from './rpc.js';
 
 export type AppOptions = {
   /** Directory of the built SPA; only used when NODE_ENV=production. */
@@ -16,6 +17,8 @@ export function createApp(options: AppOptions = {}) {
     'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getLogs', 'eth_getCode',
     'eth_feeHistory', 'web3_clientVersion', 'net_version',
   ]);
+  const forwardRpc = createMonadRpcForwarder();
+  let generatedRpcId = 0;
 
   // Small process-local limits are a guardrail for the hackathon demo; use a shared store at scale.
   const rateBuckets = new Map<string, { count: number; expiresAt: number }>();
@@ -55,20 +58,11 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api', rateLimit(180, 60_000));
   app.use(express.json({ limit: '512kb', strict: true }));
 
-  function rpcUrl() {
-    const alchemyKey = process.env.ALCHEMY_API_KEY?.trim();
-    if (alchemyKey) return `https://monad-testnet.g.alchemy.com/v2/${encodeURIComponent(alchemyKey)}`;
-    const fallback = process.env.MONAD_RPC_URL?.trim() || 'https://testnet-rpc.monad.xyz';
-    const parsed = new URL(fallback);
-    if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Invalid RPC protocol.');
-    return parsed.toString();
-  }
-
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
       chainId: 10143,
-      rpcProvider: process.env.ALCHEMY_API_KEY?.trim() ? 'alchemy' : 'public',
+      ...getRpcProviderStatus(),
       integrations: {
         envio: Boolean(process.env.ENVIO_GRAPHQL_URL),
         ai: aiProviderStatus(),
@@ -77,35 +71,43 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post('/api/rpc', rateLimit(300, 60_000), async (req, res) => {
-    const payload = req.body;
-    if (!payload || Array.isArray(payload) || typeof payload !== 'object' || payload.jsonrpc !== '2.0' || typeof payload.method !== 'string' || !Array.isArray(payload.params)) {
-      res.status(400).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32600, message: 'Invalid JSON-RPC request.' } });
-      return;
-    }
-    if (!allowedRpcMethods.has(payload.method)) {
-      res.status(403).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32601, message: 'RPC method not enabled.' } });
-      return;
-    }
-    if (payload.method === 'eth_sendRawTransaction' && (typeof payload.params[0] !== 'string' || payload.params[0].length > 250_000)) {
-      res.status(400).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: 'Invalid signed transaction.' } });
-      return;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 18_000);
-    try {
-      const upstream = await fetch(rpcUrl(), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
+    const validation = normalizeRpcRequest(req.body, allowedRpcMethods, `kite-request-${++generatedRpcId}`);
+    if (!validation.ok) {
+      const forbidden = validation.code === -32601;
+      res.status(forbidden ? 403 : 400).json({
+        jsonrpc: '2.0',
+        id: validation.id,
+        error: { code: validation.code, message: validation.message },
       });
-      const body = await upstream.text();
-      res.status(upstream.status).type('application/json').send(body);
-    } catch {
-      res.status(502).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32000, message: 'Monad RPC is temporarily unavailable.' } });
-    } finally {
-      clearTimeout(timeout);
+      return;
     }
+
+    const { request } = validation;
+    if (request.method === 'eth_sendRawTransaction'
+      && (!Array.isArray(request.params) || typeof request.params[0] !== 'string' || !/^0x(?:[0-9a-fA-F]{2})+$/.test(request.params[0]) || request.params[0].length > 250_000)) {
+      res.status(400).json({ jsonrpc: '2.0', id: request.id, error: { code: -32602, message: 'Invalid signed transaction.' } });
+      return;
+    }
+
+    const result = await forwardRpc(request);
+    res.setHeader('x-kite-rpc-attempts', String(result.attempts));
+    if (!result.ok) {
+      res.status(502).json({
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32000,
+          message: request.method === 'eth_sendRawTransaction'
+            ? 'All Monad testnet RPC providers are temporarily unavailable. Transaction status may be uncertain; check MonadScan before retrying.'
+            : 'All Monad testnet RPC providers are temporarily unavailable. Please retry shortly.',
+        },
+      });
+      return;
+    }
+
+    res.setHeader('x-kite-rpc-provider', result.provider);
+    res.setHeader('x-kite-rpc-fallback-used', result.fallbackUsed ? 'true' : 'false');
+    res.status(result.status).json(result.body);
   });
 
   const transferSelection = `
