@@ -41,7 +41,7 @@ Built for **Monad Metropolis** · track: **Consumer Products & Payments**.
 | Path | What it is |
 |---|---|
 | [`kite/`](kite/) | The application: React + Vite + TypeScript PWA and the same-origin Express API. **Start here** — see [`kite/README.md`](kite/README.md). |
-| [`kite/server/`](kite/server/) | Express API: Alchemy JSON-RPC proxy with a method allowlist, Envio GraphQL reader, optional Kimi/Qwen/Hunyuan endpoints. Server-only secrets; `/api/health` reports providers without echoing keys. |
+| [`kite/server/`](kite/server/) | Express API: Alchemy-first, chain-ID-checked Monad RPC failover with a method allowlist, Envio GraphQL reader, optional Kimi/Qwen/Hunyuan endpoints. Server-only secrets; `/api/health` reports provider preference and backup count without echoing URLs or keys. |
 | [`kite/indexer/`](kite/indexer/) | Envio **HyperIndex** config, GraphQL schema and handler for the real Agora AUSD `Transfer` event on Monad testnet. |
 | [`kite/docs/`](kite/docs/) | [Submission runbook](kite/docs/SUBMISSION_RUNBOOK.md) · [demo script](kite/docs/DEMO_SCRIPT.md) · [bounty map](kite/docs/BOUNTY_MAP.md) · [threat model](kite/docs/THREAT_MODEL.md) · [test matrix](kite/docs/TEST_MATRIX.md) |
 
@@ -63,7 +63,7 @@ Open <http://localhost:4173>. Without keys the app runs in a clearly labelled pr
 never sends a transaction.
 
 ```bash
-npm test          # 49 tests, 7 files
+npm test          # 52 tests, 7 files
 npm run build     # tsc --noEmit && vite build
 npm audit         # 0 vulnerabilities
 ```
@@ -81,7 +81,7 @@ Do not deploy `dist/` as a static site: the app needs the same-origin Express AP
 
 | Integration | Status on the live service |
 |---|---|
-| **Alchemy** — Monad testnet RPC | **Live.** All browser reads and signed broadcasts go through the server proxy; `/api/health` reports `rpcProvider: "alchemy"`. |
+| **Alchemy** — Monad testnet RPC | Key is configured on Render. A live `eth_chainId` proxy error was reported; this branch fixes optional JSON-RPC params and adds chain-checked provider failover. Production redeploy and live retest are still required. |
 | **Mera** — passkey PRF and signing | **Integrated.** The only account layer. Requires a real device/authenticator to demonstrate. |
 | **Agora AUSD** — settlement | **Integrated.** Real testnet contract; faucet claim is built into the app (10,000 test AUSD per call). |
 | **Envio** — HyperIndex activity feed | **Code complete, not deployed.** Indexer is local-tested; without `ENVIO_GRAPHQL_URL` the Activity page falls back to bounded RPC logs and labels itself as such. |
@@ -104,12 +104,12 @@ Only evidence-backed claims. Verified 2026-10-11 (UTC).
 
 - [x] Public repository
 - [x] Public HTTPS deployment serving the SPA **and** the API
-- [x] `/api/health` → `{"status":"ok","chainId":10143,"rpcProvider":"alchemy", ...}`
+- [x] `/api/health` reports chain ID `10143` and configured provider preference without exposing keys; it is a configuration check, not an upstream RPC probe
 - [x] Alchemy key configured server-side on Render
+- [!] **RPC regression reported on the current Render build:** `eth_chainId` returned `Invalid JSON-RPC request` because the proxy required a `params` array even though JSON-RPC permits `params` to be omitted. This branch normalizes omitted params and adds chain-checked Alchemy → configured backup(s) → public RPC failover; deployment and production verification are pending.
 - [x] EIP-712 invoice links sign, round-trip and verify on the deployed build (`/pay?r=…` → **Verified**)
 - [x] Demo wallet `0xba7cd500C6CbE528eEBA123583de0B09B8f109dB` funded with 10 test MON
-- [ ] **Test AUSD balance — currently 0.** One in-app faucet tap fixes this. This is the only
-      remaining blocker to a recorded on-chain payment.
+- [ ] **Test AUSD balance — last observed as 0.** Re-check after the RPC fix is deployed; if still empty, claim through the in-app faucet. A real on-chain payment remains unverified.
 - [ ] A real AUSD transfer with a public explorer receipt
 - [ ] Envio Cloud endpoint
 - [ ] Metropolis portal submission and demo video

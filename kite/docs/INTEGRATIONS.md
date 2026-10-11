@@ -13,11 +13,12 @@ The read check is not a substitute for a successful testnet faucet request and A
 ## Alchemy Monad Testnet RPC
 
 1. Create a Monad Testnet app in Alchemy.
-2. Set `ALCHEMY_API_KEY` only in the server's environment.
-3. Restart the API, then verify `GET /api/health` returns `rpcProvider: "alchemy"`.
-4. Create a passkey account and exercise a balance read, faucet call, and AUSD send; all use the same-origin `/api/rpc` proxy.
+2. Set `ALCHEMY_API_KEY` only in the server's environment; optionally configure `MONAD_RPC_URL` and comma-separated `MONAD_RPC_FALLBACK_URLS` as HTTPS backup endpoints.
+3. Restart the API. `GET /api/health` reports the preferred provider and backup count, but does not probe availability.
+4. Run the `eth_chainId` curl smoke test in `SUBMISSION_RUNBOOK.md` §2.1 with `params` omitted; expect `0x279f` and inspect the non-secret provider/fallback response headers.
+5. Create a passkey account and exercise a balance read, faucet call, and AUSD send; all use the same-origin `/api/rpc` proxy.
 
-The browser never receives the Alchemy key. The proxy only allows read methods and signed raw transaction submission; it does not accept an arbitrary chain URL or private RPC target.
+The browser never receives the Alchemy key or calls RPC providers directly. The proxy only allows known RPC methods and signed raw transaction submission, validates each provider reports testnet chain ID `10143`, and never accepts an RPC URL from the request body.
 
 ## Envio HyperIndex
 

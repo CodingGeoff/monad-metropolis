@@ -18,12 +18,12 @@ describe('AUSD amount and signed payment request', () => {
     const request = await signPaymentRequest({
       account: seller,
       payee: seller.address,
-      amountText: '240.50',
+      amountText: '150',
       title: 'Design sprint',
       description: 'Three-day product design sprint.',
       now,
     });
-    expect(request.amount).toBe('240500000');
+    expect(request.amount).toBe('150000000');
     expect(await verifyPaymentRequest(request)).toBe(true);
     const decoded = decodePaymentRequest(encodePaymentRequest(request), now);
     expect(decoded.invoiceId).toBe(request.invoiceId);

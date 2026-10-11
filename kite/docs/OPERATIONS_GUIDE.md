@@ -1,10 +1,10 @@
 # Kite 完整操作手册（Metropolis 参赛版）
 
-> 版本日期：2026-10-11（UTC 核对）。本手册描述当前 `main` 分支的代码（分期付款、服务端拆分、**49** 项自动化测试）。
+> 版本日期：2026-10-11（UTC 核对）。本手册含有历史 `main` 状态；RPC 回归与当前修复/生产部署状态以 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 为准。本工作分支已增加 RPC failover 和 52 项自动化测试。
 >
 > **⚠️ 距离截止不到 48 小时，请直接按 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 执行。** 本手册是背景参考和详细操作说明，不是冲刺清单。
 >
-> **已上线：** <https://kite-monad-payments.onrender.com/>，`/api/health` 返回 `rpcProvider: "alchemy"`、`chainId: 10143`；`envio` 与三项 AI provider 仍为 `false`。
+> **已上线：** <https://kite-monad-payments.onrender.com/>。历史 `/api/health` 报告 `rpcProvider: "alchemy"`、`chainId: 10143`（仅为配置概览，不代表上游可用）；当前 `eth_chainId` 错误报告与待部署修复以 [SUBMISSION_RUNBOOK.md](SUBMISSION_RUNBOOK.md) 为准。`envio` 与三项 AI provider 上次检查为 `false`。
 >
 > **定位声明：** Kite 是 Monad **测试网**上的原型，未经审计，不得用于真实资金。测试网 AUSD 与 MON 没有货币价值。
 
@@ -42,7 +42,7 @@
 | Mera — Best Mera-Powered UX | $2,500 | Mera 作为唯一账户层；无扩展、无助记词 | 真机 passkey 创建/恢复实测 |
 | Mera — One Passkey, Many Keys | $2,500 | PRF 派生第二密钥加密通讯录 | 证明存储只有密文，并完成锁定后解密 |
 | Envio — Best Use of Envio | $1,000 | HyperIndex 索引 AUSD Transfer；Activity 页优先读取 Envio | Envio Cloud 部署并设置 `ENVIO_GRAPHQL_URL` |
-| Alchemy — Best Projects using Alchemy | $1,000 credits | 服务端 RPC 代理，配置 key 后走 Alchemy | 申请 key，证明 `rpcProvider: alchemy` |
+| Alchemy — Best Projects using Alchemy | $1,000 credits | 服务端 RPC 代理优先尝试 Alchemy；health 只反映配置，不证明请求由 Alchemy 成功处理 | 部署修复后用响应头确认实际 provider 未 fallback，并提供 Alchemy 控制台 usage 证据 |
 | Kimi — Best Builds Powered by KIMI | $3,000 credits | 发票文案生成（可选，非核心） | 真实 key 与真实调用记录 |
 | Alibaba Cloud — Best Builds with Qwen 3.8 Max | $5,000 credits | 发票译文（可选） | 真实 key 与真实调用记录 |
 
@@ -61,7 +61,7 @@
             │
 Express API（server/app.ts）
   ├─ /api/health        仅返回布尔与 provider 名称，绝不回显密钥
-  ├─ /api/rpc           JSON-RPC 白名单代理（Alchemy 或公共测试网 RPC）
+  ├─ /api/rpc           JSON-RPC 白名单代理（Alchemy → 配置备份 → 公共 RPC，逐节点校验 chain ID）
   ├─ /api/envio/transfers  Envio GraphQL（HTTPS 且服务端固定地址）
   └─ /api/ai            Kimi / Qwen / Hunyuan（服务端密钥，严格 JSON 结构校验）
             │
@@ -128,8 +128,9 @@ NODE_ENV=production PORT=4174 npm start
 |---|---|---|
 | `VITE_MERA_RP_ID` | 生产必需 | WebAuthn RP ID，应设为最终域名（如 `kite-monad-payments.onrender.com`）。**构建前设置**，上线后不要更改，否则已有 passkey 失效 |
 | `PORT` | 否 | API 端口，默认 4174 |
-| `ALCHEMY_API_KEY` | Alchemy 赛道需要 | 设置后 RPC 经 Alchemy Monad 测试网。`/api/health` 会显示 `rpcProvider: "alchemy"` |
-| `MONAD_RPC_URL` | 否 | 备用 RPC，默认 `https://testnet-rpc.monad.xyz`，只接受 http(s) |
+| `ALCHEMY_API_KEY` | Alchemy 赛道需要 | 首选 Alchemy Monad 测试网；`/api/health` 报告首选 provider 和备用节点数量（不代表已探测在线） |
+| `MONAD_RPC_URL` | 否 | 可配置的第二 RPC；生产环境必须 HTTPS |
+| `MONAD_RPC_FALLBACK_URLS` | 否 | 逗号分隔的备用 RPC URL，最多考虑 3 个；调用前逐个验证 chain ID 为 `10143`；最后仍有内置官方公共 RPC |
 | `ENVIO_GRAPHQL_URL` | Envio 赛道需要 | Envio 托管端点，必须 HTTPS，以 `/graphql` 结尾 |
 | `KIMI_API_KEY`、`KIMI_BASE_URL`、`KIMI_MODEL` | Kimi 赛道需要 | 默认模型 `kimi-k3`；base URL 必须为纯 HTTPS |
 | `QWEN_API_KEY`、`QWEN_BASE_URL`、`QWEN_MODEL` | Qwen 赛道需要 | 按阿里云百炼的地域/工作区填写正确的 base URL |
@@ -145,7 +146,7 @@ NODE_ENV=production PORT=4174 npm start
 
 ```bash
 npx tsc --noEmit      # 类型检查（含 tests/）
-npm test              # 7 个文件 · 49 项测试（只扫描 tests/）
+npm test              # 7 个文件 · 52 项测试（只扫描 tests/）
 npm run build         # tsc + vite 生产构建
 npm audit --omit=dev  # 应显示 0 vulnerabilities
 ```
@@ -168,11 +169,23 @@ npm test              # 1 项：Transfer 事件处理
 | `payment-schedule.test.ts` | 分期拆分精确求和、到期日间隔、篡改期数/到期日被拒、单张发票哈希向后兼容（12 项） |
 | `contact-crypto.test.ts` | AES-GCM 往返、随机 IV、错误密钥与密文篡改拒绝 |
 | `account-derivation.test.ts` | 同一 PRF 输出得到稳定地址，会话结束后清零 |
-| `server-api.test.ts` | 健康检查不泄密、Alchemy 路由、RPC 白名单、Envio 端点校验、Kimi/Qwen/Hunyuan 请求形态（桩上游，18 项） |
+| `server-api.test.ts` | 健康检查不泄密、Alchemy 路由、RPC 白名单与故障切换、Envio 端点校验、Kimi/Qwen/Hunyuan 请求形态（桩上游，21 项） |
 | `api.test.ts` | 启动真实服务进程的冒烟测试 |
 | `ai-schema.test.ts` | AI 输入上限与禁止金额/地址字段 |
 
 **测试通过 ≠ 审计通过 ≠ 比赛资格。** 测试中的上游全部是桩，不能作为赞助商真实调用的证据。
+
+### RPC 发布后 smoke test
+
+先在部署完成后验证标准的 `eth_chainId` 请求（特意不传 `params`，这正是 viem 的正常形式）：
+
+```bash
+curl -i -sS https://kite-monad-payments.onrender.com/api/rpc \
+  -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}'
+```
+
+期望 HTTP `200`、JSON `result: "0x279f"`（十进制 `10143`），且响应头给出 `x-kite-rpc-provider` / `x-kite-rpc-fallback-used`。`/api/health` 的 provider 字段只表示**优先配置**，不代表上游已连通。若这里返回 502，应用已尝试所有可用的测试网节点；稍后重试并检查 Render 日志/服务状态，不要把 `eth_chainId` 错误误判成 faucet、金额或 passkey 错误。
 
 ---
 
@@ -220,11 +233,15 @@ npm test              # 1 项：Transfer 事件处理
 
 ### 7.6 创建单张付款请求（签名链接）
 
-1. 进入**概览**页，点击右上角的 **New invoice** 按钮（弹窗标题为 **Request payment**）。
-2. 输入金额（AUSD）、标题、备注。可用“AI invoice copy”让 Kimi 或 Qwen 起草文案；未配置模型时会显示“本地预览，不计为赞助商模型调用”。
+1. 进入**概览**页，点击右上角的 **New invoice** 按钮（弹窗标题为 **Request payment**；这个弹窗的金额初值是 `150`）。侧边栏 **Invoices** 是另一编辑页，金额初值为 `250`。
+2. 输入/确认金额（AUSD）、标题、备注；若从 **Invoices** 页创建 150 AUSD，请把金额框从 `250` 改为 `150`。可用“AI invoice copy”让 Kimi 或 Qwen 起草文案；未配置模型时会显示“本地预览，不计为赞助商模型调用”。
 3. 付款计划选择 **Single payment**（也可选 2 / 3 / 6 / 12 期）。
 4. 点击 **Sign & create payment link**，passkey 签名（EIP-712）。
 5. 生成链接与二维码，复制给付款人。
+
+**金额示例：**单张 `150` AUSD 会在本机生成一条金额为 `150,000,000` 个最小单位（AUSD 6 位小数）的 EIP-712 签名请求，默认 7 天到期。创建链接本身不发链上交易、不扣款、不预留余额，也不会自动从水龙头领取 AUSD；收款方余额可以是 0。付款人打开后验签，必须用**不同于收款方**的钱包主动确认，并至少持有 150 AUSD 与少量 MON gas，之后才会发出 AUSD `transfer`。比如付款人已领到 10,000 测试 AUSD，余额层面足够付 150；测试资产没有真实价值。
+
+如果选择 3 期、总额 150 AUSD，则会签 3 条独立链接，每期 50 AUSD；不会自动扣款。当前没有链上发票合约或全局“已支付”登记：同一条仍有效的链接被重新打开时，不能保证自动识别此前已付，付款人应先查 MonadScan / 收款人到账记录，避免重复支付。不要把一张链接当成链上一次性票据。
 
 > 侧边栏 **Invoices** 页是另一个发票编辑器，带有 AI 与 Qwen 翻译，同样提供 **Payment plan**（1 / 2 / 3 / 6 / 12 期）与间隔（7 / 14 / 30 天）选择。概览弹窗与 Invoices 页共用同一套分期签名逻辑。
 
@@ -233,8 +250,8 @@ npm test              # 1 项：Transfer 事件处理
 1. 付款人打开链接（`/pay?r=...`）。应用会**自动验证签名**：签名者地址、链（10143）、代币（AUSD）、金额、备注哈希、过期时间。分期请求会显示 **Installment N of M, due YYYY-MM-DD (UTC)**，付款人可据此看到第几期与到期日。
 2. 验签失败会显示“Invoice signature did not match. Do not send funds”，此时不要付款。
 3. 验签通过后，付款人连接自己的 passkey 账户（没有则创建），点击支付。
-4. 应用发送 AUSD `transfer`，显示交易哈希。确认后该请求标记为已支付。
-5. 同一链接可能被重复打开，应用会用会话存储记住“处理中”的交易，避免重复发送。
+4. 应用发送 AUSD `transfer`，显示交易哈希；确认后当前页面显示成功。
+5. 同一浏览器会话会用 sessionStorage 记住“处理中”的哈希，防止刷新后重复提交同一笔 pending 交易。但此项目没有链上一次性发票状态：重新打开仍有效的链接或换设备后，不能保证阻止另一笔相同金额的转账。付款前应对账，避免重复付款。
 
 ### 7.8 查看活动与对账
 
@@ -313,15 +330,18 @@ npm test              # 1 项：Transfer 事件处理
 
 ## 10. 部署上线（Render）
 
-仓库根目录的 `kite/render.yaml` 已经是 Render Blueprint：Node 24.21.0、新加坡区域、免费套餐、健康检查 `/api/health`。
+**当前状态：** <https://kite-monad-payments.onrender.com/> 已在线；Blueprint 跟踪 `main`，本 Arena 分支的 RPC hotfix 尚未部署。更新现有服务时不要创建重复 Blueprint；按仓库发布流程部署后，先用第 6 节无 `params` `eth_chainId` smoke test 确认 `0x279f`，再做真机/链上验证。
 
-**步骤：**
+仓库根目录的 `kite/render.yaml` 是 Render Blueprint：Node 24.21.0、新加坡区域、免费套餐、健康检查 `/api/health`。以下只适用于新建或重建 service：
+
+**新建 service 步骤：**
 1. 确认代码已推送到你自己的 GitHub 公开仓库（Metropolis 要求提供代码链接，具体可见性以门户规则为准）。
 2. 登录 `https://render.com` → **New → Blueprint** → 连接仓库 → 选择 `kite/render.yaml`（如果仓库根不是 kite，需在 Blueprint 中指定子目录）。
 3. 在 Render 的 Environment 中添加服务端变量（见第 5 节）。**不要**把 key 写进 `render.yaml`。
 4. 设置 `VITE_MERA_RP_ID` 为最终域名（例如 `kite-monad-payments.onrender.com`），然后触发部署。它是构建期变量，改动后需要重新构建。
 5. 部署完成后验证：
-   - `https://<域名>/api/health` 返回 `status: ok`；
+   - `https://<域名>/api/health` 返回 `status: ok`（仅服务/配置检查）；
+   - 按本指南第 6 节 RPC smoke test 用**省略 `params`** 的 `eth_chainId` 检查返回 `0x279f` 和 provider 响应头；
    - `https://<域名>/` 能打开，控制台没有 CSP 报错；
    - 在手机 Safari / Chrome 上完成一次 passkey 创建。
 
@@ -340,8 +360,8 @@ npm test              # 1 项：Transfer 事件处理
 
 1. 在 Alchemy 控制台创建 **Monad Testnet** 应用，复制 API key。
 2. 在 Render 环境变量中设置 `ALCHEMY_API_KEY`，重启服务。
-3. 验证：`curl https://<域名>/api/health`，`rpcProvider` 应为 `alchemy`。
-4. 证据：Alchemy 控制台的请求统计截图 + 应用内一次余额读取。
+3. `/api/health` 的 `rpcProvider: alchemy` 仅证明配置；再用第 6 节的无 `params` `eth_chainId` curl 检查 `0x279f` 和 `x-kite-rpc-provider` 响应头。
+4. 证据：Alchemy 控制台真实请求统计截图 + 应用内一次余额读取；若 `x-kite-rpc-fallback-used: true`，该请求实际上由备用节点完成，不能把它算作 Alchemy 使用证据。
 
 ### 11.2 Envio（Best Use of Envio）
 
@@ -382,7 +402,7 @@ npm test              # 1 项：Transfer 事件处理
 | Mera UX | 真机 passkey 创建与恢复视频；无扩展、无助记词的界面截图 |
 | Mera One Passkey, Many Keys | localStorage 密文截图；锁定后用同一 passkey 解密通讯录的视频 |
 | Envio | Envio Cloud 部署页面；`/api/health` 显示 `envio: true`；Activity 来源为 Envio 的截图 |
-| Alchemy | `/api/health` 显示 `alchemy`；Alchemy 控制台用量 |
+| Alchemy | 修复版成功请求的响应头指向 Alchemy 且未 fallback；Alchemy 控制台 usage 记录（health 配置字段不算证据） |
 | Kimi / Qwen | 平台用量记录；应用内真实生成结果（注意：不得是本地预览） |
 
 **演示视频注意：** 不要把预览数据当成真实交易；不要录入 `.env`、API key、passkey 数据；说明测试网资产没有价值。
@@ -401,9 +421,8 @@ npm test              # 1 项：Transfer 事件处理
 
 | 日期 | 任务 |
 |---|---|
-| 10 月 10 日（今天） | 登录门户，确认规则（尤其 bounty 互斥与 PWA、repo 公开要求）；合并本分支；`npm test`/`build` 通过 |
-| 10 月 11 日 | 部署到 Render；配置 `VITE_MERA_RP_ID`；真机 passkey 测试；领 MON 与 AUSD |
-| 10 月 11 日晚 | 完成一笔单张与一组分期的测试网交易，保存证据；按需接入 Alchemy / Envio |
+| 10 月 11 日（今天） | 按 runbook 部署 RPC hotfix，做省略 `params` 的 `eth_chainId` smoke test；真机 passkey 测试；领 MON 与 AUSD |
+| 10 月 11 日晚 | 完成一笔单张与一组分期的测试网交易，保存证据；只有核心付款稳定后再接 Envio / AI |
 | 10 月 12 日 | 录制视频（3 分钟）；更新 README 与门户项目描述；提交 |
 | 10 月 13 日 | 只做检查，不做新功能；确认门户状态为 Submitted |
 
@@ -426,7 +445,8 @@ npm test              # 1 项：Transfer 事件处理
 | 开发页打开但接口 502 | API 没启动。确认 `npm run dev` 同时启动了 api 与 web，或直接看 `tsx` 日志 |
 | passkey 创建失败 / 无提示 | 不在安全上下文（非 localhost 或 HTTPS），或设备不支持 PRF。换 Chrome/Safari 最新版，在真机测试 |
 | 登录后地址与之前不一样 | 域名变了，或 `VITE_MERA_RP_ID` 改过。passkey 与域名绑定，无法跨域恢复 |
-| 余额显示 `—` | 公共 RPC 不可用或网络问题。等待或配置 Alchemy |
+| `/api/rpc` 返回 `Invalid JSON-RPC request`，body 显示 `eth_chainId` | 老部署把可选的 JSON-RPC `params` 当成必填。部署包含代理修复的版本后，用无 `params` smoke test 验证；不是 AUSD/faucet 错误 |
+| 余额显示 `—` / `/api/rpc` 502 | 查看 `x-kite-rpc-attempts` 与 Render 日志。本分支修复版会依次尝试 Alchemy、配置备份和 Monad 公共节点并校验 chain ID；仅在该版本部署后线上才具备此行为。检查部署版本/环境变量，或稍后刷新。若刚签名广播，先查链上状态再重发 |
 | 交易显示 insufficient funds | 没有 MON 付 gas，去 faucet.monad.xyz 领取 |
 | 发送后提示“仍在等待” | 交易未确认。不要重复发送，用同一哈希在 explorer 查询 |
 | 付款链接显示签名不匹配 | 链接被改动（标题、金额、备注被修改）。让商家重新签名 |
@@ -468,6 +488,6 @@ npm test              # 1 项：Transfer 事件处理
 ## 17. 浏览器验证记录（本次）
 
 - **已验证：** 生产构建下首页可渲染，控制台无报错；按钮文字与弹窗文字与本文档一致（见第 7 节）。
-- **未验证：** passkey 注册（Create passkey）在沙箱的 headless Chromium 中会导致标签页崩溃，因此无法端到端测试：开户、分期签名、付款人支付、Invoices 页的分期选择。这些只通过了 `tsc --noEmit`、单元测试（49 项）与生产构建。
+- **未验证：** passkey 注册（Create passkey）在沙箱的 headless Chromium 中会导致标签页崩溃，因此无法端到端测试：开户、分期签名、付款人支付、Invoices 页的分期选择。这些只通过了 `tsc --noEmit`、单元测试（52 项）与生产构建。
 - **下一步：** 在真实设备（Chrome 或 Safari，支持 PRF 的 passkey）上按第 7、8 节走一遍，并记录结果。
 - **提示：** WebAuthn 不接受 IP 地址作为 RP ID，本地测试请使用 `http://localhost:4180`，不要使用 `127.0.0.1`。

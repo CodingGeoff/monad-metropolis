@@ -29,6 +29,11 @@ export const ausdFaucetAbi = [
 ] as const;
 
 export function createMonadPublicClient() {
+  // The same-origin API performs provider failover server-side. Disable nested viem
+  // retries so one logical read does not multiply the proxy's bounded attempts.
   const rpc = typeof window === 'undefined' ? MONAD_TESTNET_RPC : `${window.location.origin}/api/rpc`;
-  return createPublicClient({ chain: monadTestnet, transport: http(rpc) });
+  return createPublicClient({
+    chain: monadTestnet,
+    transport: http(rpc, { timeout: 45_000, retryCount: 0 }),
+  });
 }

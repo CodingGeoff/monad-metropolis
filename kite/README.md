@@ -4,7 +4,7 @@
 
 > **Prototype / testnet only.** No real money. No security audit. Do not use for mainnet funds.
 
-**Live:** <https://kite-monad-payments.onrender.com/> · **Health:** [`/api/health`](https://kite-monad-payments.onrender.com/api/health) → `rpcProvider: "alchemy"`, `chainId: 10143`
+**Live:** <https://kite-monad-payments.onrender.com/> · **Health:** [`/api/health`](https://kite-monad-payments.onrender.com/api/health) reports the configured RPC preference and backup count (it does not itself probe the upstream nodes).
 
 For the current submission status and the remaining steps, read [`docs/SUBMISSION_RUNBOOK.md`](docs/SUBMISSION_RUNBOOK.md).
 
@@ -19,7 +19,7 @@ For the current submission status and the remaining steps, read [`docs/SUBMISSIO
 ## Stack
 
 - React + Vite + TypeScript
-- Express same-origin API for Alchemy JSON-RPC, Envio GraphQL and optional OpenAI-compatible Kimi/Qwen/Hunyuan endpoints
+- Express same-origin API with Alchemy-first, chain-ID-checked Monad RPC failover, Envio GraphQL and optional OpenAI-compatible Kimi/Qwen/Hunyuan endpoints
 - Mera `@category-labs/mera` for passkey PRF and signing sessions
 - viem for EVM RPC, EIP-712 and AUSD transfers
 - Envio HyperIndex for AUSD Transfer history
@@ -58,13 +58,21 @@ The API loads the root `.env` with Node.js's native env-file loader; values alre
 
 | Environment variable | Purpose |
 |---|---|
-| `ALCHEMY_API_KEY` | Routes the same-origin Monad testnet RPC proxy through Alchemy; `/api/health` reports the provider without exposing the key. |
+| `ALCHEMY_API_KEY` | Preferred same-origin Monad testnet RPC. On provider failure, the server tries configured backups and then the official public testnet RPC; no key or endpoint URL is returned to the browser. |
+| `MONAD_RPC_URL` | Optional operator-configured secondary RPC URL. HTTPS is required in production. |
+| `MONAD_RPC_FALLBACK_URLS` | Optional comma-separated backup URLs (up to three are considered); every endpoint is checked for chain ID `10143` before use. The official public endpoint remains the final built-in fallback. |
 | `ENVIO_GRAPHQL_URL` | Hosted HyperIndex GraphQL endpoint used by the Activity page. |
 | `KIMI_API_KEY`, `KIMI_BASE_URL`, `KIMI_MODEL` | Kimi invoice-copy drafting. Default model: `kimi-k3`. |
 | `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL` | Qwen invoice translation. Set the exact endpoint for your Alibaba Model Studio region/workspace. |
 | `HUNYUAN_API_KEY`, `HUNYUAN_BASE_URL`, `HUNYUAN_MODEL` | Optional Hunyuan-compatible text provider; default endpoint/model are documented in `.env.example`. |
 
 If a model key is missing, the UI can insert a clearly labeled local copy preview. That is not a call to Kimi/Qwen and does not qualify as sponsor-model usage.
+
+## Monad RPC reliability
+
+All browser chain traffic stays on the same-origin `/api/rpc` route. JSON-RPC 2.0 allows `params` to be omitted for methods with no arguments; the proxy normalizes that form to `params: []` (the viem `eth_chainId` case that previously failed). Provider order is Alchemy, configured backup URLs, then Monad's public testnet endpoint. Each endpoint must answer chain ID `10143` before it receives reads or signed broadcasts. Transient transport/provider failures fall through; a definitive EVM error such as a contract revert is returned as-is. Failed providers enter a short cooldown but are still retried if every endpoint is cooling down. Responses include non-secret `x-kite-rpc-provider`, `x-kite-rpc-fallback-used`, and `x-kite-rpc-attempts` diagnostics.
+
+This improves availability but cannot guarantee service if every configured endpoint or the network is down. After an ambiguous signed-broadcast timeout, check the transaction on MonadScan before trying again.
 
 ## Envio indexer
 
@@ -86,7 +94,7 @@ Local HyperIndex development needs Docker and the Envio setup described in the [
 npm test
 ```
 
-Coverage includes signed installment plans (exact splitting, tamper-bound schedule fields), deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation, RPC method allowlisting, and in-process server routing for Alchemy, Envio and Kimi/Qwen/Hunyuan using stubbed upstreams. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
+Coverage includes signed installment plans (exact splitting, tamper-bound schedule fields), deterministic Mera account derivation and signing-session zeroization, HKDF/AES-GCM contact encryption and tamper rejection, exact AUSD amount parsing, EIP-712 link integrity/expiry, API input validation, RPC method allowlisting, real viem `eth_chainId` routing with omitted params, chain-ID-checked RPC failover and in-process server routing for Alchemy, Envio and Kimi/Qwen/Hunyuan using stubbed upstreams. The separate Envio package has its own handler-simulation test, typecheck and zero-vulnerability npm audit. Passing local tests do not equal an audit or prize eligibility proof.
 
 ## Security and privacy
 

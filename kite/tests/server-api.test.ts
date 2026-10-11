@@ -1,12 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import { createPublicClient, defineChain, http } from 'viem';
 import { createApp } from '../server/app';
 
 // Upstream providers (RPC, Envio, Kimi/Qwen/Hunyuan) are stubbed; only the local test server is real.
 const realFetch = globalThis.fetch;
 const ENV_KEYS = [
-  'ALCHEMY_API_KEY', 'MONAD_RPC_URL', 'ENVIO_GRAPHQL_URL',
+  'ALCHEMY_API_KEY', 'MONAD_RPC_URL', 'MONAD_RPC_FALLBACK_URLS', 'ENVIO_GRAPHQL_URL',
   'KIMI_API_KEY', 'KIMI_BASE_URL', 'KIMI_MODEL', 'MOONSHOT_API_KEY',
   'QWEN_API_KEY', 'QWEN_BASE_URL', 'QWEN_MODEL', 'DASHSCOPE_API_KEY',
   'HUNYUAN_API_KEY', 'HUNYUAN_BASE_URL', 'HUNYUAN_MODEL', 'TOKENHUB_API_KEY',
@@ -65,6 +66,7 @@ describe('health endpoint', () => {
       status: 'ok',
       chainId: 10143,
       rpcProvider: 'public',
+      rpcFallbacks: 0,
       integrations: { envio: false, ai: { kimi: false, qwen: false, hunyuan: false } },
     });
   });
@@ -75,8 +77,9 @@ describe('health endpoint', () => {
     process.env.ENVIO_GRAPHQL_URL = 'https://indexer.example/v1/graphql';
     const res = await realFetch(`${base}/api/health`);
     const text = await res.text();
-    const body = JSON.parse(text) as { rpcProvider: string; integrations: { envio: boolean; ai: Record<string, boolean> } };
+    const body = JSON.parse(text) as { rpcProvider: string; rpcFallbacks: number; integrations: { envio: boolean; ai: Record<string, boolean> } };
     expect(body.rpcProvider).toBe('alchemy');
+    expect(body.rpcFallbacks).toBe(1);
     expect(body.integrations).toEqual({ envio: true, ai: { kimi: true, qwen: false, hunyuan: false } });
     expect(text).not.toContain('alchemy-secret');
     expect(text).not.toContain('sk-kimi-secret');
@@ -87,23 +90,105 @@ describe('JSON-RPC proxy', () => {
   it('routes allowed reads through Alchemy when the server key is set, keeping the key out of the response', async () => {
     process.env.ALCHEMY_API_KEY = 'alchemy-secret-123456';
     upstreamHandler = () => json({ jsonrpc: '2.0', id: 7, result: '0x279f' });
-    const res = await post('/api/rpc', { jsonrpc: '2.0', id: 7, method: 'eth_chainId', params: [] });
+    // viem's HttpRequestError renders this method without `params`; on the wire it
+    // sends JSON-RPC 2.0 with an id but omits the optional params field.
+    const res = await post('/api/rpc', { jsonrpc: '2.0', id: 7, method: 'eth_chainId' });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 7, result: '0x279f' });
+    expect(res.headers.get('x-kite-rpc-provider')).toBe('alchemy');
     expect(upstreamCalls).toHaveLength(1);
     expect(upstreamCalls[0].url).toBe('https://monad-testnet.g.alchemy.com/v2/alchemy-secret-123456');
     expect(upstreamCalls[0].init?.body).toBe(JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'eth_chainId', params: [] }));
   });
 
-  it('falls back to MONAD_RPC_URL, and rejects non-HTTP(S) fallbacks', async () => {
-    upstreamHandler = () => json({ jsonrpc: '2.0', id: 1, result: '0x1' });
-    process.env.MONAD_RPC_URL = 'https://rpc.example.test/monad';
-    await post('/api/rpc', { jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] });
-    expect(upstreamCalls.at(-1)?.url).toBe('https://rpc.example.test/monad');
+  it('accepts a real viem 2.57.4 eth_chainId request with omitted params', async () => {
+    upstreamHandler = (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string; params: unknown[] };
+      expect(request.method).toBe('eth_chainId');
+      expect(request.params).toEqual([]);
+      return json({ jsonrpc: '2.0', id: request.id, result: '0x279f' });
+    };
+    const chain = defineChain({
+      id: 10143,
+      name: 'Monad Testnet',
+      nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+      rpcUrls: { default: { http: ['https://testnet-rpc.monad.xyz'] } },
+    });
+    const client = createPublicClient({ chain, transport: http(`${base}/api/rpc`, { retryCount: 0 }) });
+    expect(await client.getChainId()).toBe(10143);
+    expect(upstreamCalls).toHaveLength(1);
+  });
 
+  it('fails over from unavailable Alchemy through a configured backup to the public testnet RPC', async () => {
+    process.env.ALCHEMY_API_KEY = 'alchemy-down-001';
+    process.env.MONAD_RPC_FALLBACK_URLS = 'https://backup-one.example.test/rpc';
+    upstreamHandler = (url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string };
+      if (url.includes('alchemy') || url.includes('backup-one')) return new Response('provider down', { status: 503 });
+      return json({ jsonrpc: '2.0', id: request.id, result: '0x279f' });
+    };
+
+    const response = await post('/api/rpc', { jsonrpc: '2.0', id: 17, method: 'eth_chainId' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ jsonrpc: '2.0', id: 17, result: '0x279f' });
+    expect(upstreamCalls.map((call) => call.url)).toEqual([
+      'https://monad-testnet.g.alchemy.com/v2/alchemy-down-001',
+      'https://backup-one.example.test/rpc',
+      'https://testnet-rpc.monad.xyz/',
+    ]);
+    expect(response.headers.get('x-kite-rpc-provider')).toBe('public');
+    expect(response.headers.get('x-kite-rpc-fallback-used')).toBe('true');
+    expect(upstreamCalls.every((call) => JSON.parse(String(call.init?.body)).params?.length === 0)).toBe(true);
+  });
+
+  it('rejects a wrong-chain provider and preserves definitive EVM execution errors without retrying', async () => {
+    process.env.ALCHEMY_API_KEY = 'alchemy-wrong-chain-002';
+    upstreamHandler = (url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string };
+      const result = request.method === 'eth_chainId' ? (url.includes('alchemy') ? '0x1' : '0x279f') : '0x0';
+      return json({ jsonrpc: '2.0', id: request.id, result });
+    };
+    const chain = await post('/api/rpc', { jsonrpc: '2.0', id: 21, method: 'eth_chainId' });
+    expect(chain.status).toBe(200);
+    expect(await chain.json()).toEqual({ jsonrpc: '2.0', id: 21, result: '0x279f' });
+    expect(chain.headers.get('x-kite-rpc-provider')).toBe('public');
+
+    process.env.ALCHEMY_API_KEY = 'alchemy-revert-003';
+    upstreamCalls = [];
+    upstreamHandler = (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string };
+      if (request.method === 'eth_chainId') return json({ jsonrpc: '2.0', id: request.id, result: '0x279f' });
+      return json({ jsonrpc: '2.0', id: request.id, error: { code: -32000, message: 'execution reverted' } });
+    };
+    const reverted = await post('/api/rpc', {
+      jsonrpc: '2.0', id: 22, method: 'eth_call', params: [{ to: '0x0000000000000000000000000000000000000001', data: '0x' }, 'latest'],
+    });
+    expect((await reverted.json() as { error: { message: string } }).error.message).toBe('execution reverted');
+    expect(upstreamCalls).toHaveLength(2);
+    expect(upstreamCalls.every((call) => call.url.includes('alchemy-revert-003'))).toBe(true);
+  });
+
+  it('chain-checks a configured RPC and skips invalid non-HTTPS endpoints', async () => {
+    upstreamHandler = (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: number | string; method: string };
+      return json({ jsonrpc: '2.0', id: request.id, result: request.method === 'eth_chainId' ? '0x279f' : '0x10' });
+    };
+    process.env.MONAD_RPC_URL = 'https://rpc.example.test/monad';
+    const response = await post('/api/rpc', { jsonrpc: '2.0', id: 1, method: 'eth_blockNumber' });
+    expect(response.status).toBe(200);
+    expect(upstreamCalls.map((call) => call.url)).toEqual([
+      'https://rpc.example.test/monad',
+      'https://rpc.example.test/monad',
+    ]);
+    expect(JSON.parse(String(upstreamCalls[0].init?.body)).method).toBe('eth_chainId');
+    expect(JSON.parse(String(upstreamCalls[1].init?.body)).method).toBe('eth_blockNumber');
+
+    upstreamCalls = [];
+    upstreamHandler = () => new Response('unavailable', { status: 503 });
     process.env.MONAD_RPC_URL = 'file:///etc/passwd';
-    const bad = await post('/api/rpc', { jsonrpc: '2.0', id: 2, method: 'eth_blockNumber', params: [] });
+    const bad = await post('/api/rpc', { jsonrpc: '2.0', id: 2, method: 'eth_chainId' });
     expect(bad.status).toBe(502);
+    expect(upstreamCalls.every((call) => call.url === 'https://testnet-rpc.monad.xyz/')).toBe(true);
   });
 
   it('blocks wallet-level and unknown methods and malformed payloads', async () => {
@@ -111,8 +196,8 @@ describe('JSON-RPC proxy', () => {
     expect(blocked.status).toBe(403);
     const unknown = await post('/api/rpc', { jsonrpc: '2.0', id: 4, method: 'debug_traceTransaction', params: [] });
     expect(unknown.status).toBe(403);
-    const notArray = await post('/api/rpc', { jsonrpc: '2.0', id: 5, method: 'eth_chainId', params: {} });
-    expect(notArray.status).toBe(400);
+    const invalidParams = await post('/api/rpc', { jsonrpc: '2.0', id: 5, method: 'eth_chainId', params: null });
+    expect(invalidParams.status).toBe(400);
     const oversized = await post('/api/rpc', { jsonrpc: '2.0', id: 6, method: 'eth_sendRawTransaction', params: ['0x' + 'a'.repeat(250_001)] });
     expect(oversized.status).toBe(400);
     expect(upstreamCalls).toHaveLength(0);
@@ -123,7 +208,7 @@ describe('JSON-RPC proxy', () => {
     const res = await post('/api/rpc', { jsonrpc: '2.0', id: 8, method: 'eth_chainId', params: [] });
     expect(res.status).toBe(502);
     const body = await res.json() as { error: { message: string } };
-    expect(body.error.message).toBe('Monad RPC is temporarily unavailable.');
+    expect(body.error.message).toBe('All Monad testnet RPC providers are temporarily unavailable. Please retry shortly.');
   });
 });
 
